@@ -1,0 +1,68 @@
+#------------- DO NOT MODIFY THIS FILE  -------------#
+
+
+merge_damages_from_multiple_particles       = False                   # "True" if the user wishes to define a single genome by combiining damages
+                                                                      #  from multiple SDD files corresponding to different primary simulations
+
+number_of_particles_to_merge                = 1                       # Number of SDD files from individual primary simulations to combine
+
+primary_particles_simulated                 = electron                # Comma seperated list of names of primary particle (strings) that introduced 
+                                                                      # the damages that are going to be combined into a single genome
+
+relative_dose_contributions                 = 1                       # Comma seperated list of relative dose contributions (floats) for each particle in order
+
+sddFilePath                                 = ""                      # Path to the SDD file(s). Provide individual paths if more than 1 SDD
+
+adjust_damages_with_actual_dose             = False                   # "True" if the user wishes to scale the number of damages with the actual dose
+                                                                      # delivered and it is different from expected dose
+
+actual_dose_delivered_data                  = ""                      # Path to the file containing actual dose delivered in each run
+                                                                      # One file is expected for each SDD files specified
+
+random_seed                                 = 0                       # Specify the seed number if the RNG needs to be initialized with a fixed seed
+                                                                      # If 0, system will automatically generate random seeds completely random
+
+reference_genome_FASTAfile                  = default                 # Path to the reference genome file. Default path is hard-coded, but user can change.
+
+output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
+
+#DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a 
+                                                                      # double-strand break (DSB). Specify the distance in bp
+
+illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
+                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150 and HiSeqX
+
+single_or_bulk_sequencing                   = Single                  # Specify if single-cell or bulk-cell sequencing to be done. It can either be set to 
+                                                                      # 'single' or 'bulk'
+
+number_of_cells_in_sample                   = 600                     # Total number of cells you assume to have in your sample. This is different from the number of cells to sequence.
+                                                                      # If X is the number of cells you want to sequence, then that many cells will be randomly sampled from the sample
+
+number_of_cells_to_sequence                 = 100                     # Specify the number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected
+                                                                      # from the number of cells in sample. 
+
+total_read_coverage                         = 30                      # Specify the total read coverage you want to get from this sequencing. If single-cell sequencing
+                                                                      # the read coverage will get distributed over the total number of cells seqeunced
+
+do_paired_end_sequencing                    = True                    # "True" if the user wishes to perform paired-end sequencing. 
+
+mean_DNA_fragment_length                    = 0                       # Must specify the mean DNA fragment length (in bp) if paired-end sequencing. This is different from the read length.
+                                                                      # Read is obtained after reading a portion of the DNA fragment with this specified length
+
+std_dev_DNA_fragment_length                 = 0                       # Standard deviation in the mean DNA fragment length (in bp)
+
+maximum_errors_in_reads                     = -1                      # Specify the maximum number of indel errors that you are okay to have in a read. 
+                                                                      # Default value of -1 indicates that there is no limit or threshold to the number of errors in a read
+
+read1_insertion_error_rate                  = 0.00009                 # Specify the insertion error rate for read 1. Expects a double value between 0 and 1
+                                                                      # Default value obtained from ART program. 
+
+read1_deletion_error_rate                   = 0.00011                 # Specify the deletion error rate for read 1. Expects a double value between 0 and 1
+
+read2_insertion_error_rate                  = 0.00015                 # Specify the insertion error rate for read 2. Expects a double value between 0 and 1
+
+read2_deletion_error_rate                   = 0.00023                 # Specify the deletion error rate for read 2. Expects a double value between 0 and 1
+
+output_FASTQ_filename_prefix                = CELL                    # Prefix for the sequenced output FASTQ file (omit file extension)
+
+make_summary_report                         = True                    # "True" if user wishes to generate a summary report file at the end of run
