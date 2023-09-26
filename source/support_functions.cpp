@@ -1,5 +1,6 @@
 #include "support_functions.h"
 #include "random_generator.h"
+#include "summary_report.h"
 
 #include <iostream>
 #include <string>
@@ -7,6 +8,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <cstdio>
 
 //------------------------------------------------------------------------------------------------------
 // This function is used to print the ASCII-art name of the program in the beginning of the output. (Font:Roman)
@@ -14,13 +16,16 @@
 void ascii_art(){
 std::cout<<"|---------------------------------------------------------------------------------------------|\n"
          <<"|                                                                                             |\n"
-         <<"|   .oooooo..o oooooooooo.   oooooooooo.           ooooo      ooo   .oooooo.     .oooooo..o   |\n"
-         <<"|  d8P'    `Y8 `888'   `Y8b  `888'   `Y8b          `888b.     `8'  d8P'  `Y8b   d8P'    `Y8   |\n"
-         <<"|  Y88bo.       888      888  888      888          8 `88b.    8  888           Y88bo.        |\n"
-         <<"|   `\"Y8888o.   888      888  888      888          8   `88b.  8  888            `\"Y8888o.    |\n"
-         <<"|       `\"Y88b  888      888  888      888 8888888  8     `88b.8  888     ooooo      `\"Y88b   |\n"
-         <<"|  oo     .d8P  888     d88'  888     d88'          8       `888  `88.    .88'  oo     .d8P   |\n"
-         <<"|  8\"\"88888P'  o888bood8P'   o888bood8P'           o8o        `8   `Y8bood8P'   8\"\"88888P'    |\n"
+         <<"|                                    .o8   o8o   .oooooo..o                                   |\n"
+         <<"|                                   \"888   `\"'  d8P'    `Y8                                   |\n"
+         <<"|           oooo d8b  .oooo.    .oooo888  oooo  Y88bo.       .ooooo.   .ooooo oo              |\n"
+         <<"|           `888\"\"8P `P  )88b  d88' `888  `888   `\"Y8888o.  d88' `88b d88' `888               |\n"
+         <<"|            888      .oP\"888  888   888   888       `\"Y88b 888ooo888 888   888               |\n"
+         <<"|            888     d8(  888  888   888   888  oo     .d8P 888    .o 888   888               |\n"
+         <<"|           d888b    `Y888\"\"8o `Y8bod88P\" o888o 8\"\"88888P'  `Y8bod8P' `V8bod888               |\n"
+         <<"|                                                                           888.              |\n"
+         <<"|                                                                           8P'               |\n"
+         <<"|                                                                           \"                 |\n"
          <<"|                                                                                             |\n"
          <<"|   .oooooo..o  o8o                                oooo                .                      |\n"
          <<"|  d8P'    `Y8  `\"'                                `888              .o8                      |\n"
@@ -225,5 +230,87 @@ void remove_directory(const std::string& path) {
 
     closedir(dir);
     rmdir(path.c_str());                                                    // Remove the directory itself
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// This function will check if the disk space available is enough to store all the fasta files and the
+// fastq files produced during the run. If the disk space is not enough, program will exit with an error.
+//------------------------------------------------------------------------------------------------------
+void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_size){
+    long total_fasta_size = one_fasta_size * (1+SDDdata.get_num_of_exposures());                        // Total size for all the fasta files (damaged+undamaged cells)
+    int size_readOfLength_one = 32;                                                                     // Estimated size needed for a fastq.gz file with one read of size one
+    long one_read_size = size_readOfLength_one + (2*(parameter.get_read_length()-1));                   // For every new base, 2 bytes will get added to the size needed for one base
+    long total_reads = (parameter.get_total_read_coverage()*report_ref_seq_length)/parameter.get_read_length();
+    long total_fastq_size = one_read_size * total_reads;                                                // Total size for all the fastq files (all read data)
+    long long total_storageSpace_needed = total_fasta_size + total_fastq_size;                          // Total space needed for storage (bytes)
+    std::string formattedStorageNeeded = formatBytes(total_storageSpace_needed);                        // Convert bytes into human readable format
+    
+    const std::string& directoryString = *parameter.get_output_directory();                             // Output storage directory
+    const char* directory = directoryString.c_str();
+    char command[256];                                                                                  // Character array to store the command to be executed
+    snprintf(command, sizeof(command), "df \"%s\" | awk 'NR==2 {print $4}'", directory);                // Command string; get the disk space available for the directory
+
+    FILE* pipe = popen(command, "r");                                                                   // Execute the command
+    if (!pipe || !total_fasta_size) {                                                                   // If we can't execute the command or if the fasta size was zero, then exit
+        std::cerr<<"\n WARNING: Unable to determine the disk space available for storage \n"
+                 <<" Estimated storage space needed to run the program with the given parameters is "<<formattedStorageNeeded<<"\n"
+                 <<" If the available space is less than the estimate, the program might stop with an error at the end of the run\n";
+        return;
+    }
+
+    char buffer[128];                                                                                   // Character array to store the command output read from the pipe
+    std::string result = "";
+    if (fgets(buffer, 128, pipe) != nullptr)
+        result = buffer;
+
+    pclose(pipe);                                                                                       // Close pipe 
+
+    if (result.empty()) {                                                                               // If failed to determine the disk space, return
+        std::cerr<<"\n WARNING: Unable to determine the disk space available for storage \n"
+                 <<" Estimated storage space needed to run the program with the given parameters is "<<formattedStorageNeeded<<"\n"
+                 <<" If the available space is less than the estimate, the program might stop with an error at the end of the run\n";
+        return;
+    }
+
+    long long spaceAvailable = std::stoll(result);                                                      // Disk space available (bytes)
+    std::string formattedSpaceAvailable = formatBytes(spaceAvailable);                                  // Convert bytes into human readable format
+    
+    if (total_storageSpace_needed>spaceAvailable){                                                      // If available space is not enough 
+        std::cerr<<"\n ERROR: Inadequate storage space ("<<formattedSpaceAvailable<<")\n"
+                 <<" Estimated storage space needed to run the program with the given parameters is "<<formattedStorageNeeded<<"\n";
+        exit(EXIT_FAILURE);
+    }
+    return ;
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// Function takes the number of bytes as input and returns a string representing the formatted size.
+// The function calculates the appropriate suffix (e.g., B, KB, MB, etc.) based on powers of 1024
+//------------------------------------------------------------------------------------------------------
+std::string formatBytes(long long bytes) {
+    const int base = 1024;
+    const char* suffixes[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+    if (bytes == 0) {
+        return "0 B";                                                                                   // Handle special case of 0 bytes
+    }
+    int index = static_cast<int>(std::log(bytes) / std::log(base));
+    double value = bytes / std::pow(base, index);
+
+    std::ostringstream oss;
+    oss << std::fixed << value;
+    std::string formattedValue = oss.str();
+
+    formattedValue.erase(formattedValue.find_last_not_of('0') + 1, std::string::npos);                  // Trim trailing zeros
+    if (formattedValue.back() == '.') {
+        formattedValue.pop_back();                                                                      // Remove decimal point if no fractional part
+    }
+
+    return formattedValue + " " + suffixes[index];
 }
 //------------------------------------------------------------------------------------------------------

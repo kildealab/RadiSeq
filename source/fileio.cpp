@@ -361,7 +361,8 @@ void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std
 
 
 //------------------------------------------------------------------------------------------------------------------------
-//
+// This function will generate a summary report at the end of the run. It will create a file called "Run_summary_report.txt"
+// in the output directory
 //------------------------------------------------------------------------------------------------------------------------
 void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     std::string report_filename = *parameter.get_output_directory()+"/Run_summary_report.txt";
@@ -505,3 +506,22 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     }
 }
 //------------------------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// A function to determine the size of a file that is passed. Return value in bytes
+//------------------------------------------------------------------------------------------------------
+long fileSize_bytes(const std::string& filename){
+    std::ifstream file(filename, std::ifstream::ate | std::ifstream::binary);
+    if (!file) {                                                                                          // Return 0 if file cannot be opened
+        return 0;
+    }
+    std::streampos fileSize = file.tellg();
+    if (fileSize == -1) {                                                                                 // Return 0 if file size cannot be determined
+        return 0;
+    }
+    file.close();
+    return fileSize;
+}
+//------------------------------------------------------------------------------------------------------

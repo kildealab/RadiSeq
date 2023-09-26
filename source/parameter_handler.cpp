@@ -11,10 +11,10 @@
 NGSParameters::NGSParameters(){
     default_parameter_file = "./NGSSimData/NGSDefaultParameters.txt";
     reference_genome_file = "./NGSSimData/Human_reference_genome.fa";
-    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","test"};
-    list_read_lengths = {100, 100, 125, 150, 150, 5};
-    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","test_R1.txt"};
-    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","test_R2.txt"};
+    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","test"};
+    list_read_lengths = {100, 100, 125, 150, 150, 150, 5};
+    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
+    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","test_R2.txt"};
 }
 
 
@@ -78,6 +78,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     }
     else if (*paramName == "reference_genome_FASTAfile"){
         set_reference_genome(paramName, paramValue);
+    }
+    else if(*paramName == "acceptable_difference_in_seq_length_percent"){
+        set_max_acceptable_seq_length_difference(paramValue);
     }
     else if (*paramName == "output_directory_path"){
         set_output_directory(paramValue);
@@ -188,6 +191,9 @@ void NGSParameters::set_reference_genome(std::string* paramName, std::string* pa
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: Using Ashkenazi human reference genome -----\n";
     }
+}
+void NGSParameters::set_max_acceptable_seq_length_difference(std::string* paramValue){
+    max_diff_model_Vs_reference = std::stod(*paramValue);
 }
 void NGSParameters::set_output_directory(std::string* paramValue){
     output_directory = *paramValue;
@@ -308,6 +314,9 @@ const std::vector<std::string>* NGSParameters::get_actual_dosefile_path(){
 const std::string* NGSParameters::get_reference_genome(){
     return(&reference_genome_file);
 }
+double NGSParameters::get_max_acceptable_seq_length_difference(){
+    return(max_diff_model_Vs_reference);
+}
 const std::string* NGSParameters::get_output_directory(){
     return(&output_directory);
 }
@@ -416,7 +425,7 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "illumina_sequencer"){
         std::cerr<<" Specify the name of the Illumina sequencer to be used for sequencing. \n"
         <<" The name of the sequencer has to match one of the buil-in sequencer profiles. \n"
-        <<" Built-in sequencers: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150 and HiSeqX \n";
+        <<" Built-in sequencers: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000\n";
     }
     else if (*paramName == "single_or_bulk_sequencing"){
         std::cerr<<" Specify whether you want to perform single-cell or bulk-cell whole-genome sequencing. \n"

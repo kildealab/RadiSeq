@@ -9,8 +9,6 @@
 #include <vector>
 #include <fstream>
 #include <string>
-#include <zlib.h>
-
 
 //--------------------------------------------------------------------------------------------
 // This is the function that will perform the single-cell sequencing of all the cells that are
