@@ -24,13 +24,16 @@ random_seed                                 = 0                       # Specify 
 
 reference_genome_FASTAfile                  = default                 # Path to the reference genome file. Default path is hard-coded, but user can change.
 
+acceptable_difference_in_seq_length_percent = 10                      # Specify what is the maximum acceptable difference in the lengths of the reference genome provided 
+                                                                      # and the genome length of the Monte Carlo model in percentage. 
+
 output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
 #DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a 
                                                                       # double-strand break (DSB). Specify the distance in bp
 
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
-                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150 and HiSeqX
+                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
 
 single_or_bulk_sequencing                   = Single                  # Specify if single-cell or bulk-cell sequencing to be done. It can either be set to 
                                                                       # 'single' or 'bulk'
