@@ -18,6 +18,7 @@ class NGSParameters{
     bool is_adjust_dose;                                                         // If damages needs to be adjusted with actual dose delivered
     std::vector<std::string> actual_dosefile_path;                               // Vector to hold the paths to files containing actual dose deposited in each run by each particle
     std::string reference_genome_file;                                           // Variable holding reference genome fasta file path
+    double max_diff_model_Vs_reference;                                          // Variable to hold the maximum acceptable difference in the lengths of MC model genome and the reference genome in percentage
     std::string output_directory;                                                // Path to the output directory where all the fastq files generated should be stored
     //int dsb_threshold;                                                           // This will hold the threshold distance between two opposite SSBs to form a DSB, in bp.
     std::string sequencer;                                                       // Name of the illumina sequencer to be used. Must be one with the build-in error profiles
@@ -74,6 +75,9 @@ public:
 
     void set_reference_genome(std::string*, std::string*);                       // function to set the reference genome path
     const std::string* get_reference_genome();                                   // function to get the reference genome path
+
+    void set_max_acceptable_seq_length_difference(std::string*);                 // function to set the 'max_diff_model_Vs_reference' value
+    double get_max_acceptable_seq_length_difference();                           // function to get the 'max_diff_model_Vs_reference' value
 
     void set_output_directory(std::string*);                                     // function to set the path to output directory
     const std::string* get_output_directory();                                   // function to get the output directory path

@@ -4,6 +4,13 @@
 #include <string>
 #include <vector>
 
+#include "parameter_handler.h"
+#include "sddfile_handler.h"
+
+class NGSParameters;                                                         // Forward declaration of the class before definition
+class NGSsdd;                                                                // Forward declaration of the class before definition
+
+
 void ascii_art();                                                            // Function to print the ASCII art of the program name
 void checkArgument(int, char**);                                             // Function to check the main() function arguments
 std::string lowercaseString(std::string*);                                   // Function to convert any string to lowercase
@@ -19,6 +26,9 @@ void removeAnElement(std::vector<T>&);                                       // 
 bool is_nums_in_same_interval(const std::vector<long>&, int, int);           // Function is used to check if opposite SSBs are on same chromosome
 void sortNremoveDuplicates_inVector(std::vector<long>&);                     // Function will sort() and remove duplicates from any long vector passed
 void remove_directory(const std::string&);                                   // Function to remove a non-empty directory and its contents
+void checkStorageSize(NGSParameters&, NGSsdd&, long);                        // Function to check if the storage size avaialable is enough to run this
+                                                                             // program with the given parameters and requriements
 
+std::string formatBytes(long long);                                          // Function to convert bytes into human readable format (Kb, Mb, Gb etc.)
 
 #endif
