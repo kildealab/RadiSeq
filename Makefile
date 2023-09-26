@@ -23,7 +23,7 @@ SRC = $(wildcard $(SRC_DIR)/*.cpp)
 # Take all source files from SRC_DIR
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
 # For every source file, generate an object file in OBJ_DIR
-EXECUTABLE = SDD_NGSSimulator
+EXECUTABLE = radiSeq
 # Specifies the name of the executable generated
 
 
