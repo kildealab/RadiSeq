@@ -26,6 +26,8 @@ OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
 EXECUTABLE = radiSeq
 # Specifies the name of the executable generated
 
+# Create the 'objects' directory if it doesn't exist
+$(shell mkdir -p $(OBJ_DIR))
 
 all: $(SRC) $(EXECUTABLE)
 $(EXECUTABLE): $(OBJS)
