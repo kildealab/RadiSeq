@@ -31,7 +31,7 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
 * Compatible with any nuclear DNA model that can output an SDD
 * Option to switch between single-cell and bulk-cell sequencing
 * Option to perform paired-end sequencing
-* 5 built-in Illumina sequencers to choose from
+* 6 built-in Illumina sequencers to choose from
 * Users can use any reference genome of their choosing
 * Option to generate a detailed run summary output file
 
