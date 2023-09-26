@@ -1,6 +1,6 @@
-# SDD-NGS_Simulator
+# radiSeq_Simulator
 
-This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. SDD-NGS Simulator can perform both bulk- and single-cell whole genome DNA sequencing.
+This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. radiSeq Simulator can perform both bulk- and single-cell whole genome DNA sequencing.
 
 
 ## Table of Contents
@@ -21,9 +21,9 @@ Contact email: felix.mathew@mail.mcgill.ca
 Website: www.kildealab.com
 
 ## Description
-Use SDD-NGS Simulator to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. <br>
+Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. <br>
 
-![Logo](https://github.com/felixmat/SDD-NGS_Simulator/blob/main/SDD_NGS%20Simulator.svg)
+![Logo](https://github.com/felixmat/radiSeq_Simulator/blob/main/radiSeq%20Simulator.svg)
 
 ## Features
 
@@ -45,19 +45,19 @@ Use SDD-NGS Simulator to computationally simulate whole genome DNA sequencing of
 
 ### Getting started
 
-1. Download the latest version of SDD-NGS_Simulator
-2. Unzip the downloaded SDD-NGS_Simulator file
+1. Download the latest version of radiSeq_Simulator
+2. Unzip the downloaded radiSeq_Simulator file
 3. Download the generic human reference genome [(click here to download)](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz)<br>
    Save the downloaded file in the 'NGSSimData' directory under the name `'Human_reference_genome.fa.zip'`.
-5. Compile SDD-NGS_Simulator:
-   * `cd path/to/SDD-NGS_Simulator`
+5. Compile radiSeq_Simulator:
+   * `cd path/to/radiSeq_Simulator`
    * `make`
 
 Ignore any warnings that you might see.
 
 ### Running a test
-Run the test sequencing to check if the SDD-NGS_Simulator is working fine. You can run the test using the command:
-<br> `./SDD_NGSSimulator ./inputfiles/TestParameters.txt`
+Run the test sequencing to check if the radiSeq_Simulator is working fine. You can run the test using the command:
+<br> `./radiSeq ./inputfiles/TestParameters.txt`
 
 A successful test run will generate FASTQ output files and a run summary file in a folder called 'output'.
 
@@ -82,7 +82,7 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | acceptable_difference_in_seq_length_percent | Acceptable difference in the lengths of the reference genome provided and the genome length of the Monte Carlo model | Percentage (double) |
 | number_of_cells_in_sample | Total number of cells the user assumes to have in your sample. This is different from the number of cells to sequence | Number (integer) |
 | number_of_cells_to_sequence | Number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected from the number of cells in the sample | Number (integer) |
-| illumina_sequencer | Name of the Illumina sequencer to be used for sequencing from the in-built list | 'HiSeq1000', 'HiSeq2000', 'HiSeq2500_v125', 'HiSeq2500_v150' and 'HiSeqX' |
+| illumina_sequencer | Name of the Illumina sequencer to be used for sequencing from the in-built list | 'HiSeq1000', 'HiSeq2000', 'HiSeq2500_v125', 'HiSeq2500_v150', 'HiSeqX' and 'NovaSeq6000' |
 | single_or_bulk_sequencing | Flag to specify if single-cell or bulk-cell sequencing is to be performed | 'single' or 'bulk' |
 | do_paired_end_sequencing | Flag to indicate if paired-end sequencing to be performed | 'True' or 'False' |
 | mean_DNA_fragment_length | Mean DNA fragment length (in bp) if paired-end sequencing. This is different from the read length | Number (integer) |
@@ -101,8 +101,8 @@ of their choosing, as long as the contents of the file are formatted in a specif
 
 ## Acknowledgements
 
-The sequencing segment of the SDD_NGS Simulator was inspired by the ART Illumina sequencing tool published open-source by the US National Institute of Health.
-Some of the in-built Illumina sequencer error profiles and the indel error rates used in the SDD_NGS Simulator were adopted from the ART sequencing tool. 
+The sequencing segment of the radiSeq Simulator was inspired by the ART Illumina sequencing tool published open-source by the US National Institute of Health.
+Some of the in-built Illumina sequencer error profiles and the indel error rates used in the radiSeq Simulator were adopted from the ART sequencing tool. 
 We sincerely thank the authors Weichun Huang et al. for making the ART toolkit available open-source. 
 
 To learn more about the ART toolkit:
