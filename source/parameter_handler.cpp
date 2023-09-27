@@ -5,7 +5,7 @@
 
 #include <iostream>
 #include <string>
-
+#include <algorithm>
 
 // Default constructor
 NGSParameters::NGSParameters(){

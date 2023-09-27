@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <map>
+#include <string>
 
 class ART{
     static std::vector<std::map<unsigned int, unsigned short>> read1_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 1 

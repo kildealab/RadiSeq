@@ -5,6 +5,7 @@
 #include <ctime>
 #include <unistd.h>
 #include <cmath>
+#include <algorithm>
 
 #include "support_functions.h"
 #include "fileio.h"

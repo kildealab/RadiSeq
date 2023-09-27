@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <cstdio>
+#include <algorithm>
 
 //------------------------------------------------------------------------------------------------------
 // This function is used to print the ASCII-art name of the program in the beginning of the output. (Font:Roman)

@@ -9,6 +9,7 @@
 #include <vector>
 #include <fstream>
 #include <string>
+#include <algorithm>
 
 //--------------------------------------------------------------------------------------------
 // This is the function that will perform the single-cell sequencing of all the cells that are
