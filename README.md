@@ -53,7 +53,7 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
    * `cd path/to/radiSeq_Simulator`
    * `make`
    Ignore any warnings that you might see.
-6. Set up the environment variable 'RADISEQ_DATA_DIR'
+6. Set up the environment variable 'RADISEQ_DATA_DIR'<br>
    You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.
    * `export RADISEQ_DATA_DIR=path/to/radiSeq_Simulator/radiSeqData`
 
