@@ -52,12 +52,14 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
 5. Compile radiSeq_Simulator:
    * `cd path/to/radiSeq_Simulator`
    * `make`
-
-Ignore any warnings that you might see.
+   Ignore any warnings that you might see.
+6. Set up the environment variable 'RADISEQ_DATA_DIR'
+   You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.
+   * `export RADISEQ_DATA_DIR=path/to/radiSeq_Simulator/radiSeqData`
 
 ### Running a test
 Run the test sequencing to check if the radiSeq_Simulator is working fine. You can run the test using the command:
-<br> `./radiSeq ./inputfiles/TestParameters.txt`
+<br> `./radiSeq ./example_test/TestParameters.txt`
 
 A successful test run will generate FASTQ output files and a run summary file in a folder called 'output'.
 

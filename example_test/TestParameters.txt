@@ -11,16 +11,16 @@ primary_particles_simulated                 = electron                # Comma se
 
 relative_dose_contributions                 = 0.5,0.5                         # Comma seperated list of relative dose contributions (floats) for each in order
 
-sddFilePath                                 =  ./inputfiles/test_sdd.txt, ./inputfiles/test_sdd2.txt      # Path to the SDD file(s)
+sddFilePath                                 =  ./example_test/test_sdd.txt, ./example_test/test_sdd2.txt      # Path to the SDD file(s)
 
 adjust_damages_with_actual_dose             = true                 # "True" if the user wishes to scale the number of damages with the actual dose
                                                                       # delivered and it is different from expected dose.
 
-actual_dose_delivered_data                  = ./inputfiles/test_actualDose.txt,    ./inputfiles/test_actualDose2.txt                 # Path to the file containing actual dose delivered in each run
+actual_dose_delivered_data                  = ./example_test/test_actualDose.txt,    ./example_test/test_actualDose2.txt                 # Path to the file containing actual dose delivered in each run
 
 random_seed                                 = 0                     # Specify a random seed if you wish to provide a fixed seed to RNG. Else default. 0 is also default
 
-reference_genome_FASTAfile                  = ./inputfiles/test_fasta.fa                    # Path to the reference genome file if user wants to specify one. Else default
+reference_genome_FASTAfile                  = ./example_test/test_fasta.fa                    # Path to the reference genome file if user wants to specify one. Else default
 
 output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
