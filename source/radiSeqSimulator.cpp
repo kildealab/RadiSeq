@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <cmath>
 #include <algorithm>
+#include <cstdlib>
 
 #include "support_functions.h"
 #include "fileio.h"
@@ -22,6 +23,16 @@ int main(int argc, char* argv[]){
     clock_t start_time, end_time;                                                                               // Variables to hold start and end times of this program
     start_time = clock();                                                                                       // Getting the starting time of the program
     
+    const char* dataFolder = std::getenv("RADISEQ_DATA_DIR");                                                   // Getting the environment variable "RADISEQ_DATA" which holds the position of the radiSeqData folder path
+    std::string dataFolderPath;                                                                                 // Variable to hold the string value of the environment variable
+    if (dataFolder != nullptr){                                                                                 // Check if the environment variable is set. If not, exit with error message
+        dataFolderPath = dataFolder;                                                                            // Convert the environment variable to a C++ string
+    }else{                                                                                
+        std::cerr<<"\n ERROR: The environment variable \"RADISEQ_DATA_DIR\" is not set correctly \n"
+                 <<" Refer to the installation instructions in README \n";
+        exit(EXIT_FAILURE);
+    }
+
     ascii_art();                                                                                                // Prints the program name in output       
     checkArgument(argc, argv);                                                                                  // Check if parameter file is provided as an argument. If not, print error and exit. 
     const std::string user_parameter_file{argv[1]};                                                             // Defining the path to the user-specified parameter file
@@ -29,7 +40,7 @@ int main(int argc, char* argv[]){
     //-------------- Stage 1: Reading the UserParameter file -----------------//
     NGSParameters parameters;                                                                                   // Initializing parameters of the class NGSParameters
     std::cout<<"\n ----- Initiating parameter file processing ----- \n";
-    parameters.process_parameterFile(&user_parameter_file, parameters);                                         // Set sequencing parameters using user-specified parameter file. Undefined parameters will default
+    parameters.process_parameterFile(&user_parameter_file, parameters, &dataFolderPath);                        // Set sequencing parameters using user-specified parameter file. Undefined parameters will default
     std::cout<<"\n Successfully completed the parameter file processing \n";
 
     //-------------- Stage 2: Reading all the SDD files -----------------//

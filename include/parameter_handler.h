@@ -7,7 +7,9 @@
 
 
 class NGSParameters{
-    std::string default_parameter_file;                                          // Object holding defualt parameter file path. Hard-coded value
+    std::string default_parameter_file;                                          // Object holding defualt parameter file path w.r.t the dataFolderPath
+    std::string default_parameter_file_name;                                     // Object holding defualt parameter file name. Hard-coded value
+    std::string dataFolderPath;                                                  // Variable to hold the path to the folder containing all the required data files
     // Following variable objects hold respective parameter value(s)
     unsigned int random_seed;                                                    // RNG seed value. If user provides, fixed value will be stored, else random
     bool is_merge_damages;                                                       // Assigns 1 if parameter value is "True" or "true". Else 0. If damages from different SDD to be merged
@@ -17,6 +19,7 @@ class NGSParameters{
     std::vector<std::string> sddfile_path;                                       // Vector to hold the paths to SDD files from different particles to construct a genome
     bool is_adjust_dose;                                                         // If damages needs to be adjusted with actual dose delivered
     std::vector<std::string> actual_dosefile_path;                               // Vector to hold the paths to files containing actual dose deposited in each run by each particle
+    std::string reference_genome_file_name;                                      // Variable holding reference genome fasta file name
     std::string reference_genome_file;                                           // Variable holding reference genome fasta file path
     double max_diff_model_Vs_reference;                                          // Variable to hold the maximum acceptable difference in the lengths of MC model genome and the reference genome in percentage
     std::string output_directory;                                                // Path to the output directory where all the fastq files generated should be stored
@@ -46,7 +49,7 @@ class NGSParameters{
 
 public:
     NGSParameters();                                                             // Default constructor
-    void process_parameterFile(const std::string*, NGSParameters&);              // Function to set all the user-defined sequencing parameters
+    void process_parameterFile(const std::string*, NGSParameters&, std::string*);// Function to set all the user-defined sequencing parameters
     void set_parameters(std::string*, std::string*);                             // Mother function, when called will initiate all set functions
 
     void set_random_seed(std::string*);                                          // function to set the RNG seed if there is one provided

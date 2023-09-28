@@ -9,8 +9,8 @@
 
 // Default constructor
 NGSParameters::NGSParameters(){
-    default_parameter_file = "./NGSSimData/NGSDefaultParameters.txt";
-    reference_genome_file = "./NGSSimData/Human_reference_genome.fa";
+    default_parameter_file_name = "/NGSDefaultParameters.txt";
+    reference_genome_file_name = "/Human_reference_genome.fa";
     list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","test"};
     list_read_lengths = {100, 100, 125, 150, 150, 150, 5};
     list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
@@ -22,7 +22,7 @@ NGSParameters::NGSParameters(){
 //--------------------------------------------------------------------------------------------
 // This function takes user-specified input file as argument and process the file
 //--------------------------------------------------------------------------------------------
-void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSParameters& parameter){
+void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSParameters& parameter, std::string* dataPath){
     // Parameter file is a MANDATORY requirement since we need to know SDD file path. If not found, exit with an error.
     if (!checkFileExists(parameterfile)){
         std::cerr<<"\n ERROR: Unable to read the parameter file : "<< *parameterfile<<'\n';
@@ -31,6 +31,11 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
         std::cout<<"\n Successfully read the parameter file: "<< *parameterfile<<'\n';
     }
     
+    dataFolderPath = *dataPath;
+    // Defining data filenames w.r.t the variable dataFolderPath
+    default_parameter_file = dataFolderPath+default_parameter_file_name;
+    reference_genome_file = dataFolderPath+reference_genome_file_name;
+
     // Continue if parameter file is present and set all parameter values
     readParameterFile(&default_parameter_file, parameter);         // Read default parameter file first to set default parameter values
     readParameterFile(parameterfile, parameter);                   // Read user-specified parameter file to overwrite default parameter values
@@ -208,8 +213,8 @@ void NGSParameters::set_read_length(int sequencer_index){                       
     read_length = list_read_lengths[sequencer_index];
 }
 void NGSParameters::set_read_quality_profiles(int sequencer_index){
-    r1_quality_profile = "./NGSSimData/"+list_r1_quality_profiles[sequencer_index];
-    r2_quality_profile = "./NGSSimData/"+list_r2_quality_profiles[sequencer_index];
+    r1_quality_profile = dataFolderPath+"/"+list_r1_quality_profiles[sequencer_index];
+    r2_quality_profile = dataFolderPath+"/"+list_r2_quality_profiles[sequencer_index];
 }
 void NGSParameters::set_sequencing_mode(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "single"||lowercaseString(paramValue) == "bulk"){
