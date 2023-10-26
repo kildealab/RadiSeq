@@ -18,7 +18,7 @@ Felix Mathew and John Kildea
 
 Contact email: felix.mathew@mail.mcgill.ca
 
-Website: www.kildealab.com
+Website: [www.kildealab.com](https://kildealab.com/software/radiseq_simulator/)
 
 ## Description
 Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. <br>
@@ -48,18 +48,20 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
 1. Download the latest version of radiSeq_Simulator
 2. Unzip the downloaded radiSeq_Simulator file
 3. Download the generic human reference genome [(click here to download)](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz)<br>
-   Save the downloaded file in the 'NGSSimData' directory under the name `'Human_reference_genome.fa.zip'`.
+   Unzip the downloaded file and save it in the 'radiSeqData' directory under the name `'Human_reference_genome.fa'`.
 5. Compile radiSeq_Simulator:
    * `cd path/to/radiSeq_Simulator`
-   * `make`
+   * `make`<br>
    Ignore any warnings that you might see.
 6. Set up the environment variable 'RADISEQ_DATA_DIR'<br>
    You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.
-   * `export RADISEQ_DATA_DIR=path/to/radiSeq_Simulator/radiSeqData`
+   * `export RADISEQ_DATA_DIR=path/to/radiSeq_Simulator/radiSeqData`<br>
+**Note**: Replace 'path/to/radiSeq_Simulator' in step 5 and 6 with the actual full path to the directory radiSeq_Simulator in your system
 
 ### Running a test
-Run the test sequencing to check if the radiSeq_Simulator is working fine. You can run the test using the command:
-<br> `./radiSeq ./example_test/TestParameters.txt`
+Run the test sequencing to check if the radiSeq_Simulator is working fine. You can run the test using the command:<br> 
+* `cd ./example_test`
+* `../radiSeq ./TestParameters.txt`
 
 A successful test run will generate FASTQ output files and a run summary file in a folder called 'output'.
 

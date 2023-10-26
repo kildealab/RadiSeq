@@ -35,7 +35,7 @@ class NGSParameters{
     std::string sequencing_mode;                                                 // This value sets if user wants single-cell or bulk-cell sequencing
     int num_of_cells_in_sample;                                                  // Total number of cells we assume to have in a sample. Cells to sequence will be randomly sampled from this sample
     int num_of_cells_to_sequence;                                                // Total number of cells to be sequenced (damaged or not) at the end of a single run of this program
-    int total_read_coverage;                                                     // Total read coverage: collectively from all cells sequenced
+    double total_read_coverage;                                                  // Total read coverage: collectively from all cells sequenced
     bool is_paired_end_seq;                                                      // True if user wishes to have paired-end sequencing
     int mean_DNA_fragment_length;                                                // Mean DNA fragment length in bp (Mandatory input if paired-end)
     int std_dev_DNA_fragment_length;                                             // Standard deviation in mean DNA fragment length in bp (Mandatory input if paired-end)
@@ -108,7 +108,7 @@ public:
     int get_num_of_cells_to_sequence();                                          // function to get the 'num_of_cells_to_sequence'
 
     void set_total_read_coverage(std::string*, std::string*);                    // function to set the read coverage value
-    int get_total_read_coverage();                                               // function to get the total read coverage
+    double get_total_read_coverage();                                            // function to get the total read coverage
 
     void set_paired_end_sequencing(std::string*, std::string*);                  // function to set 'is_paired_end_seq'
     bool get_paired_end_sequencing();                                            // function to get 'is_paired_end_seq'

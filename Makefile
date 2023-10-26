@@ -17,7 +17,9 @@ OBJ_DIR = objects
 # -std=c++11 C++ language standard should be C++11
 # -I$(INC_DIR) Include files from INC_DIR when compiling
 CFLAGS = -c -Wall -O -g -std=c++11 -I$(INC_DIR)
-LDFLAGS = 
+LDFLAGS =  
+# LDFLAGS are linker flags
+# -lrt link against the real-time extensions library (sometimes needed when working with POSIX functions)
 
 SRC = $(wildcard $(SRC_DIR)/*.cpp)
 # Take all source files from SRC_DIR

@@ -120,7 +120,6 @@ void ART::generate_read_with_indel(){
     } 
   
     std::string read_template_seq = chromSegmentSeq.substr(start_position, read_length-length_changed); // Obtain the read template sequence from the chromSegmentSeq 
-    
     read_maker(read_template_seq);                                                                      // Generate the read sequence by incorporating the indels into the read template sequence
 }
 //--------------------------------------------------------------------------------------------
@@ -378,6 +377,7 @@ void ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int mean_fr
     
     read_1.read_maker(read1_template_seq);                                                              // Generate the read sequence by incorporating the indels into the template sequence of read 1
     read_2.read_maker(read2_template_seq);                                                              // Generate the read sequence by incorporating the indels into the template sequence of read 2
+
 }
 //--------------------------------------------------------------------------------------------
 

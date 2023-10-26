@@ -239,8 +239,8 @@ void NGSParameters::set_num_of_cells_to_sequence(std::string* paramName, std::st
     }
 }
 void NGSParameters::set_total_read_coverage(std::string* paramName, std::string* paramValue){
-    if(std::stoi(*paramValue) > 0){
-        total_read_coverage = std::stoi(*paramValue);
+    if(std::stod(*paramValue) > 0){
+        total_read_coverage = std::stod(*paramValue);
     }else{
         help_parameter(paramName);
     }
@@ -349,7 +349,7 @@ int NGSParameters::get_num_of_cells_in_sample(){
 int NGSParameters::get_num_of_cells_to_sequence(){
     return(num_of_cells_to_sequence);
 }
-int NGSParameters::get_total_read_coverage(){
+double NGSParameters::get_total_read_coverage(){
     return(total_read_coverage);
 }
 bool NGSParameters::get_paired_end_sequencing(){
@@ -446,7 +446,7 @@ void NGSParameters::help_parameter(std::string* paramName){
         <<" This value is expected to be less than or equal to the total number of cells in the sample \n";
     }
     else if (*paramName == "total_read_coverage"){
-        std::cerr<<" Specify the total read coverage you want to get from this sequencing (Integer value expected). \n"
+        std::cerr<<" Specify the total read coverage you want to get from this sequencing (Double value expected). \n"
         <<" If single-cell sequencing, the coverage gets distributed over the number of cells to be sequenced. \n"
         <<" i.e, if 100 cells sequenced with a coverage of 100x each cell will have 1x coverage in single-cell sequencing \n";
     }

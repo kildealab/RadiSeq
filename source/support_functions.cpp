@@ -252,7 +252,7 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
     const std::string& directoryString = *parameter.get_output_directory();                             // Output storage directory
     const char* directory = directoryString.c_str();
     char command[256];                                                                                  // Character array to store the command to be executed
-    snprintf(command, sizeof(command), "df \"%s\" | awk 'NR==2 {print $4}'", directory);                // Command string; get the disk space available for the directory
+    snprintf(command, sizeof(command), "df -k \"%s\" | awk 'NR==2 {print $4}'", directory);            // Command string; get the disk space available for the directory (in Kilobytes)
 
     FILE* pipe = popen(command, "r");                                                                   // Execute the command
     if (!pipe || !total_fasta_size) {                                                                   // If we can't execute the command or if the fasta size was zero, then exit
@@ -276,7 +276,7 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
         return;
     }
 
-    long long spaceAvailable = std::stoll(result);                                                      // Disk space available (bytes)
+    long long spaceAvailable = std::stoll(result)*1000;                                                 // Disk space available (bytes)
     std::string formattedSpaceAvailable = formatBytes(spaceAvailable);                                  // Convert bytes into human readable format
     
     if (total_storageSpace_needed>spaceAvailable){                                                      // If available space is not enough 

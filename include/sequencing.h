@@ -8,6 +8,6 @@
 #include <vector>
 
 void single_cell_sequencing(NGSParameters&, const std::vector<std::string>&, long);
-void bulk_cell_sequencing(NGSParameters&, const std::vector<std::string>&, long);
+void bulk_cell_sequencing(NGSParameters&, const std::vector<std::string>&, const std::vector<int>&, long);
 
 #endif
