@@ -15,12 +15,7 @@
 //--------------------------------------------------------------------------------------------
 std::vector<std::map<unsigned int, unsigned short>> ART::read1_quality_distribution_vec;                // Quality distribution vector for read 1. This vector will not change for each cell 
 std::vector<std::map<unsigned int, unsigned short>> ART::read2_quality_distribution_vec;                // Quality distribution vector for read 2. This vector will not change for each cell 
-double ART::baseCall_error_probability[80];                                                             // Array that will hold 80 values of base call error probabilities
-int ART::read_length{0};                                                                                // Read length 
-std::string tmp ="";
-std::string& ART::chromSegmentSeq{tmp};                                                                 // Sequence of the chromosome segment being processed
-int ART::valid_region{0};                                                                               // valid_region = chromSegmentSeq.size()-read_length
-std::string ART::read_seq;                                                                              // This will be the read sequence from read template with added indels
+double ART::baseCall_error_probability[80];                                                             // Array that will hold 80 values of base call error probabilities.
 //--------------------------------------------------------------------------------------------
 
 
@@ -93,14 +88,36 @@ void ART::set_read_error_probability(int read_length, double error_rate, std::ve
 
 
 //--------------------------------------------------------------------------------------------
-// This function sets all the static members of the ART class
+// This function will take in read length and the sequence of the current chromosome segment
+// and sets the static variables read_lenth and valid_region along with the chromSegmentSeq.
+// Returns true if the chromosome segment is big enough to make reads
 //--------------------------------------------------------------------------------------------
-bool ART::init_set(int read_len, std::string& chromSegSeq){
+bool ART::set_chromSegmentSeq(int read_len,std::string& chromSeq){
     read_length = read_len;
-    chromSegmentSeq = chromSegSeq;
+    chromSegmentSeq = chromSeq;
     valid_region = chromSegmentSeq.size() - read_length;
     if(valid_region<0) return false;                                                                    // If read length is > chromSegmentSeq length, then do not proceed with the chromSegmentSeq
     return true;
+}
+//--------------------------------------------------------------------------------------------
+
+
+
+//--------------------------------------------------------------------------------------------
+// This function returns the chromosome segment sequence that is currently being processed. 
+//--------------------------------------------------------------------------------------------
+const std::string* ART::get_chromSegmentSeq(){
+    return (&chromSegmentSeq);
+}
+//--------------------------------------------------------------------------------------------
+
+
+
+//--------------------------------------------------------------------------------------------
+// This function returns the read length that we want to generate
+//--------------------------------------------------------------------------------------------
+int ART::get_read_length(){
+    return (read_length);
 }
 //--------------------------------------------------------------------------------------------
 
@@ -344,28 +361,31 @@ void ART::add_baseCall_error(std::vector<short>& read_quality_vec){
 // two reads will be generated from opposite ends of the same fragment.
 //--------------------------------------------------------------------------------------------
 void ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int mean_frag_length, int std_dev_frag_length){
+    std::string chromSegmentSeq = *read_1.get_chromSegmentSeq();                                        // Variable holding chromosome seqgment sequence
+    int read_length = read_1.get_read_length();                                                         // Variable to hold the read length that we want to generate
     // Determine the fragment length to be simulated from the chromSegmentSequence. 
-    int fragment_length;                                                                                // Variable to hold the fragment length that needs to be simulated
-    if(mean_frag_length - (2*std_dev_frag_length) > chromSegmentSeq.length()){                          // If chromSegment length < mean - 2*stdDev, then set fragment length to be chromSegmentSeq length
-	   fragment_length = chromSegmentSeq.length();
+    long chromSegment_length = chromSegmentSeq.length();                                                // Variable to hold the length of the chromosome segment being processed                               
+    long fragment_length;                                                                               // Variable to hold the fragment length that needs to be simulated
+    if(mean_frag_length - (2*std_dev_frag_length) > chromSegment_length){                               // If chromSegment length < mean - 2*stdDev, then set fragment length to be chromSegmentSeq length
+	   fragment_length = chromSegment_length;
     }else{                                                                                              // Else randomly sample a fragment length from the normal distribution of specific mean and std_dev user-specified
-	    fragment_length = static_cast<int>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length)));
-        while (fragment_length<read_length || fragment_length>chromSegmentSeq.length()){                // Sample again and again until the generated fragment length satisfies the required conditions
-		    fragment_length = static_cast<int>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length)));
+	    fragment_length = static_cast<long>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length)));
+        while (fragment_length<read_length || fragment_length>chromSegment_length){                     // Sample again and again until the generated fragment length satisfies the required conditions
+		    fragment_length = static_cast<long>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length)));
 	    }   
     }
 
-    long start_position_1 = static_cast<long>(floor((chromSegmentSeq.length()-fragment_length)*rng::rand_double(0,1))); // Starting position for read 1
-    long start_position_2 = chromSegmentSeq.length()-fragment_length-start_position_1;                  // This would be the starting position for read 2. Must be on the reverse-complementary strand
+    long start_position_1 = static_cast<long>(floor((chromSegment_length-fragment_length)*rng::rand_double(0,1))); // Starting position for read 1
+    long start_position_2 = chromSegment_length-fragment_length-start_position_1;                       // This would be the starting position for read 2. Must be on the reverse-complementary strand
 
     int length_changed_1 = read_1.get_indel_map();                                                      // Generate an indel map randomly for read 1. length_changed = length of insertions - deletions
     int length_changed_2 = read_2.get_indel_map();                                                      // Generate an indel map randomly for read 2
 
     // If length_changed is negative, we need to sample more than the read length from the chromSegmentSeq to keep the read length fixed for all generated reads
-    if((start_position_1+read_length-length_changed_1) > chromSegmentSeq.length()){                     // Check if the generated read map requires a sequence that extends beyond the chromSegmentSeq size 
+    if((start_position_1+read_length-length_changed_1) > chromSegment_length){                          // Check if the generated read map requires a sequence that extends beyond the chromSegmentSeq size 
         length_changed_1 = read_1.get_balanced_indel_map();                                             // If it does, generate another indel map, which will have number of deletions <= number of insertions to avoid it happening
     } 
-    if((start_position_2+read_length-length_changed_2) > chromSegmentSeq.length()){                     // Check if the generated read map appropriate for read 2 
+    if((start_position_2+read_length-length_changed_2) > chromSegment_length){                          // Check if the generated read map appropriate for read 2 
         length_changed_2 = read_2.get_balanced_indel_map();                                             // Re-generate the indel map for read 2 if needed
     } 
     

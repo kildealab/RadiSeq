@@ -11,6 +11,7 @@
 #include <string>
 #include <algorithm>
 #include <unordered_map>
+#include <sys/mman.h>
 
 //--------------------------------------------------------------------------------------------
 // This is the function that will perform the single-cell sequencing of all the cells that are
@@ -34,7 +35,11 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
             continue;
         }
 
-        std::ifstream cell_fasta_file(cell_fasta_filename);                                             // ifstream object of the fasta file to be sequenced
+        size_t position{0};                                                                             // Temporary variable to hold the last-read position in the memory map of the current fasta file
+        size_t fastaFileSize;                                                                           // A variable to hold the size of the fasta file of the current cell, during memory-mapping
+        void* fastaFileMM = generateInputFileMemoryMap(cell_fasta_filename, fastaFileSize);             // Create the memory-map of the fasta file
+        const char* cell_fastaFileData = static_cast<char*>(fastaFileMM);                               // Casting the memory-map void pointer to a const char pointer for further processing
+
         std::string chromSegmentSeq;                                                                    // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
         std::string chromSegmentSeq_ID;                                                                 // Temporary variable to hold IDs of each hromosome segment sequence
 
@@ -47,14 +52,14 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         std::string output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R1.fastq.gz";
         std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                 // ofstream object of the output fastq file for read 1
         
-        const int batchSize = 4000;                                                                     // Define a batch size for writing reads to the output file. These much data will be stored in cache before writing it on the file
+        const int batchSize{4000};                                                                      // Define a batch size for writing reads to the output file. These much data will be stored in cache before writing it on the file
 
         // Single-end sequencing
         if(!parameter.get_paired_end_sequencing()){                                                     // If user asked for single-end (not paired-end) sequencing
             std::vector<std::string> batch_buffer;                                                      // Create a buffer for storing read data.
-            while(getNextChromSeq(cell_fasta_file, chromSegmentSeq, chromSegmentSeq_ID)){               // Iterate through each chromsome segment sequence in the fasta file of the cell that is being sequenced
+            while(getNextChromSeq_MM(cell_fastaFileData, fastaFileSize, position, chromSegmentSeq, chromSegmentSeq_ID)){// Iterate through each chromsome segment sequence in the fasta file memory map of the cell that is being sequenced
                 long num_reads_per_segment = static_cast<long>((coverage_per_cell*chromSegmentSeq.size())/parameter.get_read_length());
-                if(!ART::init_set(parameter.get_read_length(), chromSegmentSeq)){                       // If chromSegmentSeq is smaller than the read length, then continue with the next segment
+                if(!read1.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq)){           // If chromSegmentSeq is smaller than the read length, then continue with the next segment
                     continue;
                 };
                 
@@ -95,12 +100,13 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
             std::vector<std::string> batch_buffer_r1;                                                   // Create a buffer for storing read 1 data.
             std::vector<std::string> batch_buffer_r2;                                                   // Create a buffer for storing read 2 data.
     
-            while(getNextChromSeq(cell_fasta_file, chromSegmentSeq, chromSegmentSeq_ID)){               // Iterate through each chromsome segment sequence in the fasta file of the cell that is being sequenced
+            while(getNextChromSeq_MM(cell_fastaFileData, fastaFileSize, position, chromSegmentSeq, chromSegmentSeq_ID)){// Iterate through each chromsome segment sequence in the fasta file memory map of the cell that is being sequenced
                 long num_reads_per_segment = static_cast<long>((coverage_per_cell*chromSegmentSeq.size())/parameter.get_read_length());
-                if(!ART::init_set(parameter.get_read_length(), chromSegmentSeq)){                       // If chromSegmentSeq is smaller than the read length, then continue with the next segment
+                if(!read1.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq)){           // If chromSegmentSeq is smaller than the read length, then continue with the next segment
                     continue;
                 };
-            
+                read2.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq);                // Giving a copy of these for read 2 as well
+                
                 while(num_reads_per_segment>0){
                     
                     ART::generate_paired_reads_with_indel(read1, read2, parameter.get_mean_DNA_fragment_length(), parameter.get_std_dev_DNA_fragment_length());
@@ -145,10 +151,10 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         }
         fastq_R1_file.close();
 
-        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                              // To make the report, making a vector of all the cells that were sequenced
+        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                               // To make the report, making a vector of all the cells that were sequenced
         report_fastq_output.push_back((*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i));
 
-        cell_fasta_file.close();
+        munmap(fastaFileMM, fastaFileSize);                                                             // Unmap the fasta file of the current cell to avoid memory-leaks
     }  
 }
 //--------------------------------------------------------------------------------------------
@@ -179,7 +185,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
 
     // Generate a list of lines that we want to read randomly from all the cell file prior to reading each file. This is done to avoid processing the same fasta files multiple times to generate reads from it one by one. 
     // Here we generate a map, that indicates which all lines from one fasta files should be read so that we call read all these lines in one go. 
-    int readPerFrag = 1;                                                                                // A variable to indicate how many reads per fragments we need to create. It will get 1 if single-end sequencing
+    int readPerFrag{1};                                                                                 // A variable to indicate how many reads per fragments we need to create. It will get 1 if single-end sequencing
     if(parameter.get_paired_end_sequencing()){
         readPerFrag = 2;                                                                                // This variable gets 2 if we want paired-end sequencing
     }
@@ -214,7 +220,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         total_num_reads -= reads_will_be_generated_in_cell;
     }  
  
-    const int batchSize = 4000;                                                                         // Define a batch size for writing reads to the output file. These much data will be stored in cache before writing it on the file
+    const int batchSize{4000};                                                                          // Define a batch size for writing reads to the output file. These much data will be stored in cache before writing it on the file
 
     // Single-end sequencing
     if(!parameter.get_paired_end_sequencing()){
@@ -222,20 +228,24 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         
         for (const auto& mapEntry : rand_lines_map) {                                                   // Iterate through each entries in the map. entry.first will be the cell index and entry.second is the list of the lines we need to read from that cell
             std::string cell_fasta_filename = (*parameter.get_output_directory())+"/temp/"+mapEntry.first;
-            std::ifstream cell_fasta_file(cell_fasta_filename);                                         // ifstream object of the fasta file to be sequenced
+            size_t position{0};                                                                         // Temporary variable to hold the last-read position in the memory map of the current fasta file
+            size_t fastaFileSize;                                                                       // A variable to hold the size of the fasta file of the current cell, during memory-mapping
+            void* fastaFileMM = generateInputFileMemoryMap(cell_fasta_filename, fastaFileSize);         // Create the memory-map of the fasta file
+            const char* cell_fastaFileData = static_cast<char*>(fastaFileMM);                           // Casting the memory-map void pointer to a const char pointer for further processing
+
             std::string chromSegmentSeq;                                                                // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
             std::string chromSegmentSeq_ID;                                                             // Temporary variable to hold each chromsome segment ID
             
-            int line_count = 1;                                                                         // Temporary vector to count the number of lines read from the fasta files using the getNextChromSeq function
-            int reads_actually_generated = 0;                                                           // Temporary counter variable to count the number of reads actually generated for each cell; for the report
+            int line_count{1};                                                                          // Temporary variable to count the number of lines read from the fasta files using the getNextChromSeq function
+            int reads_actually_generated{0};                                                            // Temporary counter variable to count the number of reads actually generated for each cell; for the report
             
             std::vector<int> rand_lines_list = mapEntry.second;                                         // Copy the lines list from the map into a vector for processing
             std::sort(rand_lines_list.begin(), rand_lines_list.end());                                  // Sort the line numbers in the vector in ascending order
 
-            while(getNextChromSeq(cell_fasta_file, chromSegmentSeq, chromSegmentSeq_ID)){               // Iterate through each chromsome segment sequence in the fasta file of the cell that is being sequenced
+            while(getNextChromSeq_MM(cell_fastaFileData, fastaFileSize, position, chromSegmentSeq, chromSegmentSeq_ID)){// Iterate through each chromsome segment sequence in the fasta file memory map of the cell that is being sequenced
                 if(rand_lines_list.empty()) break;                                                      // If no more reads to be generated from the current cell, then break the loop
                 
-                if(!ART::init_set(parameter.get_read_length(), chromSegmentSeq)){                       // If chromSegmentSeq is smaller than the read length, then continue with the next segment
+                if(!read1.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq)){           // If chromSegmentSeq is smaller than the read length, then continue with the next segment
                     continue;
                 };
                 
@@ -267,8 +277,8 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                 }
                 line_count += 2;                                                                        // Since two lines (ID and sequence) were read from the fasta file, increment line count by 2
             }
-            cell_fasta_file.close();
-
+            munmap(fastaFileMM, fastaFileSize);                                                         // Unmap the fasta file of the current cell to avoid memory-leaks
+    
             report_cells_sequenced.push_back(mapEntry.first);                                           // Storing the names of the cells that were actually sequenced, for the report
             report_readsGenerated_perCell.push_back(reads_actually_generated);                          // Storing the number of reads generated per cell in a vector for the final summary report
         }
@@ -292,23 +302,28 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
     
         for (const auto& mapEntry : rand_lines_map) {                                                   // Iterate through each entries in the map. entry.first will be the cell index and entry.second is the list of the lines we need to read from that cell
             std::string cell_fasta_filename = (*parameter.get_output_directory())+"/temp/"+mapEntry.first;
-            std::ifstream cell_fasta_file(cell_fasta_filename);                                         // ifstream object of the fasta file to be sequenced
+            size_t position{0};                                                                         // Temporary variable to hold the last-read position in the memory map of the current fasta file
+            size_t fastaFileSize;                                                                       // A variable to hold the size of the fasta file of the current cell, during memory-mapping
+            void* fastaFileMM = generateInputFileMemoryMap(cell_fasta_filename, fastaFileSize);         // Create the memory-map of the fasta file
+            const char* cell_fastaFileData = static_cast<char*>(fastaFileMM);                           // Casting the memory-map void pointer to a const char pointer for further processing
+
             std::string chromSegmentSeq;                                                                // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
             std::string chromSegmentSeq_ID;                                                             // Temporary variable to hold each chromsome segment ID
 
-            int line_count = 1;                                                                         // Temporary vector to count the number of lines read from the fasta files using the getNextChromSeq function
-            int reads_actually_generated = 0;                                                           // Temporary counter variable to count the number of reads actually generated for each cell; for the report
+            int line_count{1};                                                                          // Temporary vector to count the number of lines read from the fasta files using the getNextChromSeq function
+            int reads_actually_generated{0};                                                            // Temporary counter variable to count the number of reads actually generated for each cell; for the report
             
             std::vector<int> rand_lines_list = mapEntry.second;                                         // Copy the lines list from the map into a vector for processing
             std::sort(rand_lines_list.begin(), rand_lines_list.end());                                  // Sort the line numbers in the vector in ascending order
 
-            while(getNextChromSeq(cell_fasta_file, chromSegmentSeq, chromSegmentSeq_ID)){               // Iterate through each chromsome segment sequence in the fasta file of the cell that is being sequenced
+            while(getNextChromSeq_MM(cell_fastaFileData, fastaFileSize, position, chromSegmentSeq, chromSegmentSeq_ID)){// Iterate through each chromsome segment sequence in the fasta file memory map of the cell that is being sequenced
                 if(rand_lines_list.empty()) break;                                                      // If no more reads to be generated from the current cell, then break the loop
                 
-                if(!ART::init_set(parameter.get_read_length(), chromSegmentSeq)){                       // If chromSegmentSeq is smaller than the read length, then continue with the next segment
+                if(!read1.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq)){           // If chromSegmentSeq is smaller than the read length, then continue with the next segment
                     continue;
                 };
-                
+                read2.set_chromSegmentSeq(parameter.get_read_length(), chromSegmentSeq);                // Giving a copy of these for read 2 as well
+
                 std::vector<int>::iterator it;                                                          // Temporary iterator object for the rand_lines_list vector
                 while ((it = std::find(rand_lines_list.begin(), rand_lines_list.end(), line_count)) != rand_lines_list.end()) {
                     ART::generate_paired_reads_with_indel(read1, read2, parameter.get_mean_DNA_fragment_length(), parameter.get_std_dev_DNA_fragment_length());
@@ -357,8 +372,8 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                 }
                 line_count += 2;                                                                        // Since two lines (ID and sequence) were read from the fasta file, increment line count by 2
             } 
-            cell_fasta_file.close();
-
+            munmap(fastaFileMM, fastaFileSize);                                                         // Unmap the fasta file of the current cell to avoid memory-leaks
+    
             report_cells_sequenced.push_back(mapEntry.first);                                           // Storing the names of the cells that were actually sequenced, for the report
             report_readsGenerated_perCell.push_back(reads_actually_generated);                          // Storing the number of reads generated per cell in a vector for the final summary report
         }

@@ -134,11 +134,11 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
     std::string chromSeq;                                                                                 // String to store the forward chromseq from reference seq file
     std::string revComp_chromSeq;                                                                         // String to store the reverse complementary sequence for respective chrom-seq
     int chrmCount{0};                                                                                     // Seperate counter to set the seq ID. This value will not be same as nChrms if diploid
+    
     size_t position{0};                                                                                   // Temporary variable to hold the last-read position in the memory map of the reference file
-
     size_t refFileSize;                                                                                   // A variable to hold the file size of the reference genome, during memory-mapping
     void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                              // Create the memory-map of the reference genome file
-    const char* refSeqData = static_cast<char*>(refFileMM);
+    const char* refSeqData = static_cast<char*>(refFileMM);                                               // Casting the memory-map void pointer to a const char pointer for further processing
 
     const int batchSize{10};                                                                              // Define a batch size for writing data to the output memory-mapped file. These much data (buffer vector elements) will be stored in cache before writing it on the file
     std::vector<std::string> batch_buffer;                                                                // Create a buffer for storing output data.

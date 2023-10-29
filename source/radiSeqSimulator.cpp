@@ -157,5 +157,5 @@ int main(int argc, char* argv[]){
     }
 
     // Remove the temporary directory (temp) that stores the fasta file once processing is done
-    //remove_directory(tempFolderPath); 
+    remove_directory(tempFolderPath); 
 }

@@ -9,12 +9,13 @@ class ART{
     static std::vector<std::map<unsigned int, unsigned short>> read1_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 1 
     static std::vector<std::map<unsigned int, unsigned short>> read2_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 2
     static double baseCall_error_probability[80];                                                       // Static array to store the 80 values of base calling error probabilities
-    static int read_length;                                                                             // Variable to hold the read_length. Static variable will be accessible by all class objects created
-    static std::string& chromSegmentSeq;                                                                // Static variable to hold the chromosome segment sequence currently being processed
-    static int valid_region;                                                                            // Static variable to hold the value chromSegmentSeq.size()-read_length
-    static std::string read_seq;                                                                        // Static variable to hold the final read sequence after introducing damages
     std::map<int,char,std::less<int>> indel_map;                                                        // Map that stores the indel distribution of a read
-
+    // Following variables are private to each ART class object being generated
+    int read_length{0};                                                                                 // Variable to hold the read_length. Static variable will be accessible by all class objects created
+    std::string chromSegmentSeq;                                                                        // Variable to hold the chromosome segment sequence currently being processed
+    int valid_region{0};                                                                                // Variable to hold the value chromSegmentSeq.size()-read_length
+    std::string read_seq;                                                                               // Static variable to hold the final read sequence after introducing damages
+    
 public:
     
     std::vector<double> insertion_probability_vec;                                                      // Vector to hold the probability of having atleast x insertions in a read
@@ -25,8 +26,11 @@ public:
     static void set_baseCall_error_probability();                                                       // Function to set the base calling error probabilites
 
     void set_read_error_probability(int, double, std::vector<double>&, int);                            // Function to generate the probability distribution of x indels occuring in a read
-    static bool init_set(int, std::string&);                                                            // Function to set all the static variables
-
+    
+    bool set_chromSegmentSeq(int, std::string&);                                                        // Function to set the chromsome segment Sequence and read lengh
+    const std::string* get_chromSegmentSeq();                                                           // Function to get the chrom segment sequence currently processing
+    int get_read_length();                                                                              // Function to get the read length that we want to generate
+    
     void generate_read_with_indel();                                                                    // Function that that ultimately call all subfunctions to generate a read with indel damages
     int get_indel_map();                                                                                // Function to generate an indel distribution map for a read
     int get_balanced_indel_map();                                                                       // Function to generate an indel distribution map that will have deletions <= insertions

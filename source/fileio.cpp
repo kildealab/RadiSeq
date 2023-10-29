@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cstring>
 
 #include "fileio.h"
 #include "summary_report.h"
@@ -440,7 +441,7 @@ void writeBatchToMMFile(std::vector<std::string>& batch_buffer, char*& position_
                     exit(EXIT_FAILURE);
                 }
             }
-            std::memcpy(position_in_File, data.c_str(), data.size());                                     // Copy the data from the vector to the memory-mapped file
+            memcpy(position_in_File, data.c_str(), data.size());                                          // Copy the data from the vector to the memory-mapped file
             position_in_File += data.size();                                                              // Increment the memory map file pointer so that the next line to write can start from there
         }
     }
