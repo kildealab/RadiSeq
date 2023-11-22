@@ -14,11 +14,21 @@ OBJ_DIR = objects
 # -Wall Enable "warning all" 
 # -O Obtimize compilation
 # -g Include debugging information
-# -std=c++11 C++ language standard should be C++11
+# -std=c++1z or c++17 C++ language standard should be C++17 or above in clang or gcc respectively
+# -fopenmp Use openmp library for parallelization
 # -I$(INC_DIR) Include files from INC_DIR when compiling
-CFLAGS = -c -Wall -O -g -std=c++11 -I$(INC_DIR)
-LDFLAGS =  
+
+# Determine the C++17 standard flag based on the compiler
+COMPILER := $(shell $(CPP) -dM -E - < /dev/null | grep __clang__)
+ifneq ($(COMPILER),)
+    CXXFLAGS = -c -Wall -O -g -std=c++1z -fopenmp -I$(INC_DIR)
+else
+    CXXFLAGS = -c -Wall -O -g -std=c++17 -fopenmp -I$(INC_DIR)
+endif
+
+LDFLAGS = -fopenmp
 # LDFLAGS are linker flags
+# -fopenmp link openmp library for parallelization
 # -lrt link against the real-time extensions library (sometimes needed when working with POSIX functions)
 
 SRC = $(wildcard $(SRC_DIR)/*.cpp)
@@ -36,7 +46,7 @@ $(EXECUTABLE): $(OBJS)
 	$(CPP) $(LDFLAGS) $(OBJS) -o $@
 	
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	$(CPP) $(CFLAGS) $< -o $@
+	$(CPP) $(CXXFLAGS) $< -o $@
 # $(SRC) $(EXECUTABLE) -- Dependencies for building the executable
 # $(EXECUTABLE): $(OBJS) -- Rule for linking the object files
 # rest are the commands: to link the object files and create the executable

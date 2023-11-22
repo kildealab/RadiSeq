@@ -181,7 +181,7 @@ void removeAnElement(std::vector<std::string>& vec){
 // are between 10 and 20 (two same consecutive elements), function will return True. 
 //------------------------------------------------------------------------------------------------------
 bool is_nums_in_same_interval(const std::vector<long>& vec, int num1, int num2) {
-    for (int i = 0; i<vec.size(); i++) {
+    for (size_t i = 0; i<vec.size(); i++) {
         if((i+1)<vec.size()){                                               // Proceed only if it is not the last element in the vector
             if ((num1>vec[i] && num1<vec[i+1]) && (num2>vec[i] && num2<vec[i+1])){
                 return true;                                                // True if num1 and num2 are between same consecutive elements
@@ -252,7 +252,7 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
     const std::string& directoryString = *parameter.get_output_directory();                             // Output storage directory
     const char* directory = directoryString.c_str();
     char command[256];                                                                                  // Character array to store the command to be executed
-    snprintf(command, sizeof(command), "df -k \"%s\" | awk 'NR==2 {print $4}'", directory);            // Command string; get the disk space available for the directory (in Kilobytes)
+    snprintf(command, sizeof(command), "df -k \"%s\" | awk 'NR==2 {print $4}'", directory);             // Command string; get the disk space available for the directory (in Kilobytes)
 
     FILE* pipe = popen(command, "r");                                                                   // Execute the command
     if (!pipe || !total_fasta_size) {                                                                   // If we can't execute the command or if the fasta size was zero, then exit

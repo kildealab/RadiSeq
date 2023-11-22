@@ -12,6 +12,7 @@ class NGSParameters{
     std::string dataFolderPath;                                                  // Variable to hold the path to the folder containing all the required data files
     // Following variable objects hold respective parameter value(s)
     unsigned int random_seed;                                                    // RNG seed value. If user provides, fixed value will be stored, else random
+    int number_of_threads;                                                       // Number of threads that user requested. Default is 1
     bool is_merge_damages;                                                       // Assigns 1 if parameter value is "True" or "true". Else 0. If damages from different SDD to be merged
     int num_particles_to_merge;                                                  // Intiger value indicating the number of particle-simulations to merge
     std::vector<std::string> names_of_particles_to_merge;                        // Vector to hold the list of particles for which 'is_merge_damages' applicable
@@ -53,7 +54,10 @@ public:
     void set_parameters(std::string*, std::string*);                             // Mother function, when called will initiate all set functions
 
     void set_random_seed(std::string*);                                          // function to set the RNG seed if there is one provided
-    unsigned int get_random_seed();                                              // functio to get the random seed
+    unsigned int get_random_seed();                                              // function to get the random seed
+
+    void set_number_of_threads(std::string*);                                    // function to set the number of threads user requested
+    int get_number_of_threads();                                                 // function to get the number of threads user requested
 
     void set_merge_damages_from_particles(std::string*, std::string*);           // function to set 'is_merge_damages' 
     bool get_merge_damages_from_particles();                                     // function to get 'is_merge_damages' 
@@ -137,7 +141,7 @@ public:
     void set_output_fastq_filename_prefix(std::string*);                         // function to set the fastq output filename prefix
     const std::string* get_output_fastq_filename_prefix();                       // function to get the fastq output filename prefix
 
-    void set_summary_report(std::string*, std::string*);                                       // function to set "is_summary_report"
+    void set_summary_report(std::string*, std::string*);                         // function to set "is_summary_report"
     bool get_summary_report();                                                   // function to get "is_summary_report"
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter

@@ -29,6 +29,7 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
 
 * All input values can be specified in a single parameter file
 * Compatible with any nuclear DNA model that can output an SDD
+* Multi-threading enabled 
 * Option to switch between single-cell and bulk-cell sequencing
 * Option to perform paired-end sequencing
 * 6 built-in Illumina sequencers to choose from
@@ -38,7 +39,7 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
 ## Installation
 ### Prerequisites
 
-* Compiler: Should support C++11 or above
+* Compiler: Should support C++17 or above
 * OS: Unix-like systems (e.g.: Linux, macOS)
 
 **Note**: This application was developed on macOS Sierra 10.12.6.
@@ -53,9 +54,9 @@ Use radiSeq Simulator to computationally simulate whole genome DNA sequencing of
    * `cd path/to/radiSeq_Simulator`
    * `make`<br>
    Ignore any warnings that you might see.
-6. Set up the environment variable 'RADISEQ_DATA_DIR'<br>
-   You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.
+6. Set up the environment variable 'RADISEQ_DATA_DIR'
    * `export RADISEQ_DATA_DIR=path/to/radiSeq_Simulator/radiSeqData`<br>
+   You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.<br>
 **Note**: Replace 'path/to/radiSeq_Simulator' in step 5 and 6 with the actual full path to the directory radiSeq_Simulator in your system
 
 ### Running a test
@@ -63,7 +64,7 @@ Run the test sequencing to check if the radiSeq_Simulator is working fine. You c
 * `cd ./example_test`
 * `../radiSeq ./TestParameters.txt`
 
-A successful test run will generate FASTQ output files and a run summary file in a folder called 'output'.
+A successful test run will generate FASTQ output files and a run summary file in a folder called 'output' inside the example_test directory.
 
 **Note**: User can create their own [input parameter files](#input-parameters) to run specific simulations 
 
@@ -101,6 +102,7 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | output_FASTQ_filename_prefix | Prefix for the sequenced output FASTQ file (omit file extension) | String |
 | make_summary_report | Flag to indicate if the user wishes to generate a summary report file at the end of run | 'True' or 'False' |
 | random_seed | Seed number for the random number generator to be initialized with a fixed seed. A default value of 0 indicates that the system will automatically generate random seeds completely random | Number (integer) |
+| number_of_threads | Number of threads to be used for a multithreaded run. Default value is 1 | Number (integer) |
 
 
 ## Acknowledgements

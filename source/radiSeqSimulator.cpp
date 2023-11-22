@@ -2,12 +2,13 @@
 #include <string>
 #include <sys/stat.h>
 #include <fstream>
-#include <ctime>
 #include <unistd.h>
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
 #include <sys/mman.h>
+#include <chrono>
+#include <omp.h>
 
 #include "support_functions.h"
 #include "fileio.h"
@@ -21,8 +22,7 @@
 
 int main(int argc, char* argv[]){
     
-    clock_t start_time, end_time;                                                                               // Variables to hold start and end times of this program
-    start_time = clock();                                                                                       // Getting the starting time of the program
+    auto start_time = std::chrono::high_resolution_clock::now();                                                // Get the starting time of the run (for run time calculation)                                                                                       // Getting the starting time of the program
     
     const char* dataFolder = std::getenv("RADISEQ_DATA_DIR");                                                   // Getting the environment variable "RADISEQ_DATA" which holds the position of the radiSeqData folder path
     std::string dataFolderPath;                                                                                 // Variable to hold the string value of the environment variable
@@ -91,35 +91,82 @@ int main(int argc, char* argv[]){
 
     // Read each cell (exposure) damage data from the SDD file, adjust the damages according to the relative dose and actual dose delivered if necessary,
     // then combine multiple radiation damages on the same cell if needed, find DSB locations and then build a damaged genome FASTA file for each cell   
+    // But do all that, ONLY if the number of damaged data (exposure) is more than 0
+    
     std::vector<double>& rel_dose = parameters.get_relative_dose_contributions();
     std::vector<std::string>& sdd_paths = parameters.get_sddfile_path();                          
-    std::vector<int> lines_in_cell_files{};                                                                     // Vector to store the total number of lines written in each damage cell's fasta file
-    std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- \n";
+    std::vector<int> lines_in_cell_files{SDDdata.get_num_of_exposures()};                                           // Vector to store the total number of lines written in each damage cell's fasta file
     
-    
-    for(int i=0; i<SDDdata.get_num_of_exposures(); i++){                                                        // Iterate over each exposure (cell) data
-        for(int j=0; j<SDDdata.get_num_of_SDDs(); j++){                                                         // Iterate through every SDD file (damage files for a cell) given for the same exposure (cell)
-            readSDDfileData(&sdd_paths[j], SDDdata, j);                                                         // Read SDD data fields and get damages in each exposure
-            SDDdata.adjust_damages_data(rel_dose[j],i,j,parameters.get_adjust_damages_with_actual_dose());      // Adjust the number of damages if needed and store damage to a permanent vector
-            SDDdata.reset_temporary_damage_vecs();                                                              // Reset the temporary nested vectors used to hold the damage values before the next SDD file of the same cell
+    int nThreads_User = parameters.get_number_of_threads();                                                         // Variable holding the number of threads the user requesting for parallel processing
+    omp_set_nested(1);                                                                                              // Enable nested parallelism 
+    omp_set_num_threads(nThreads_User);                                                                             // Set the number of threads available for OMP as the number user requested
+        
+    if(0<SDDdata.get_num_of_exposures()){                                                                           // Attempt building damaged cells only if there is atleast one exposure data
+        std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- \n";  
+        int threadGroups{nThreads_User};                                                                            // Variable to hold the number of thread groups we want to create
+        int threadPerGroup{1};                                                                                      // Variable to hold the number of equal threads per each group
+        int xtraThreads{0};
+        if(SDDdata.get_num_of_exposures()<nThreads_User){                                                           // Check if there are more threads asked than the number of damaged cells
+            threadGroups = SDDdata.get_num_of_exposures();
+            threadPerGroup = nThreads_User/threadGroups;
+            xtraThreads = nThreads_User-(threadGroups*threadPerGroup);                                              // Determine how many threads would be xtra if I were to use only threadPerGroup threads within each group
         }
-        //SDDdata.find_DNA_breakPoints(parameters.get_dsb_threshold());
-        //-------------- Stage 3: Generating damaged cell genomes -----------------//
-        std::string fastaFileName = "/Damaged_cell_" + std::to_string(i+1) + ".fa";
-        lines_in_cell_files.push_back(buildDamagedCellGenome_from_MM(SDDdata, tempFolderPath, fastaFileName, genomeTemplate_data, templateSize));
-        std::cout<<"\n Built damage genomes of "<<std::to_string(i+1)<<" cells \n"; 
-        SDDdata.reset_permanent_damage_vecs();                                                                  // Reset all the bigger permanent damage vectors including DNAbreakpoints before processing the next cell
+        #pragma omp parallel num_threads(threadGroups)                                                              // Start parallel region with groups of threads
+        {
+            #pragma omp single                                                                                      // Following block should only be processed once
+            {
+                int nGroupthreads = omp_get_num_threads();                                                          // Get the number of thread groups OMP actually created
+                SDDdata.init_set_data_holders(nGroupthreads);                                                       // Resize and initiate all the data holder that store group-wise data
+            }
+            #pragma omp barrier                                                                                     // Wait here till all thread groups reach this point
+            #pragma omp for                                                                                         // Split the thread group over the for loop
+            for(int i=0; i<SDDdata.get_num_of_exposures(); i++){                                                    // Iterate over each exposure (cell) data
+                int workerThreads = threadPerGroup;
+                if(i<xtraThreads){workerThreads+=1;}                                                                // Distribute extra threads to the groups
+                int groupTID = omp_get_thread_num();
+                std::vector<std::string> lineStack;                                                                 // Temporary vector to hold the SDD line data for each exposure only
+                int sddCounter = 0;                                                                                 // Temporary variable to count the SDD files parsed
+                #pragma omp parallel num_threads(workerThreads) shared(lineStack,sddCounter)
+                {
+                    int j = 0;
+                    while(j<SDDdata.get_num_of_SDDs()){                                                             // Iterate through every SDD file (damage files for a cell) given for the same exposure (cell)
+                        readSDDfileData(&sdd_paths[j], SDDdata, j, i,lineStack, groupTID);                          // Read SDD data fields and get damages in each exposure
+                        #pragma omp barrier                                                                         // Make
+                        #pragma omp single
+                        {
+                            SDDdata.merge_workerThread_vectors(groupTID);
+                            SDDdata.adjust_damages_data(rel_dose[j],i,j,parameters.get_adjust_damages_with_actual_dose(),groupTID);  // Adjust the number of damages if needed and store damage to a permanent vector
+                            SDDdata.reset_temporary_damage_vecs(groupTID);                                                           // Reset the temporary nested vectors used to hold the damage values before the next SDD file of the same cell
+                            sddCounter++;                                                                                            // Increment the SDD counter to indicate the number of files parsed
+                        }
+                        #pragma omp barrier
+                        j = sddCounter;                                                                             // Update the local flag so that all the threads get the updated value
+                    }
+                }
+                //SDDdata.find_DNA_breakPoints(parameters.get_dsb_threshold());
+                //-------------- Stage 3: Generating damaged cell genomes -----------------//
+                std::string fastaFileName = "/Damaged_cell_" + std::to_string(i+1) + ".fa";
+                lines_in_cell_files[i] = buildDamagedCellGenome_from_MM(SDDdata, tempFolderPath, fastaFileName, genomeTemplate_data, templateSize, groupTID);
+                #pragma omp critical
+                {
+                    std::cout<<"\n Built damage genomes of "<<std::to_string(i+1)<<" cells \n"; 
+                }
+                SDDdata.reset_permanent_damage_vecs(groupTID);                                                      // Reset all the bigger permanent damage vectors including DNAbreakpoints before processing the next cell
+            }
+        }
+        std::cout<<"\n Building of all the damaged cell genomes is now complete \n";
+    }else{
+        std::cerr<<"\n WARNING: The SDD files provided have invalid (empty) damage data.\n Data from these files will be ignored\n"; 
     }
     munmap(genomeTemplate_data, templateSize);                                                                  // Unmap the memory-map to avoid memory leaks after use
-    std::cout<<"\n Building of all the damaged cell genomes is now complete \n";
-
+    
     //-------------- Stage 4: Integrating ART pipeline -----------------//
     
     // Randomly sample 'num_of_cells_to_sequence' from 'num_of_cells_in_sample'. First generate a random number in the range of number of cells in sample. If that number is less than the number of damaged cells, then add the 
     // damaged cell fasta filename to the list. If that cell is already added, then repeat. If the random number is greater than the num of damaged cells, then add the undamaged fasta filename to the list. 
     std::vector<std::string> cellGenomes_to_be_sequenced{};                                                     // Vector to store the fasta filenames of the cells to be sequenced
     std::vector<int> lines_in_cells_to_sequence{};                                                              // Vector to store the total number of lines in the fasta files of cells to be sequenced in order
-    while (cellGenomes_to_be_sequenced.size() < parameters.get_num_of_cells_to_sequence()){                     // Iterate till enough number of cells are randomly sampled from the pool of cells for sequencing    
+    while (cellGenomes_to_be_sequenced.size() < static_cast<size_t>(parameters.get_num_of_cells_to_sequence())){// Iterate till enough number of cells are randomly sampled from the pool of cells for sequencing    
         int cell_id = rng::rand_int(1, parameters.get_num_of_cells_in_sample());                                // Randomly pick an ID for a cell to be sequenced from the sample     
         if (cell_id <= SDDdata.get_num_of_exposures()){                                                         // If the ID corresponds to a damaged cell, then
             std::string damaged_fasta_filename = "Damaged_cell_" + std::to_string(cell_id) + ".fa";
@@ -146,11 +193,12 @@ int main(int argc, char* argv[]){
         std::cout<<"\n Bulk-cell sequencing of cells are now complete. You can find the sequenced FASTQ files in the output folder: \""<<output_directory<<"\"\n\n";
     }
     
-    end_time = clock();                                                                                         // Finding the end time of the run
-
+    auto end_time = std::chrono::high_resolution_clock::now();                                                  // Get the ending time of the run (for run time calculation)                                                                                          // Finding the end time of the run
+    
     // Make the summary report of the run if specified
     if (parameters.get_summary_report()){
-        report_cpu_time_used = (static_cast<double>(end_time - start_time)) / CLOCKS_PER_SEC;
+        std::chrono::duration<double> duration = end_time - start_time;
+        report_cpu_time_used = duration.count();
         report_parameterFileName = user_parameter_file;
         report_ref_seq_length = ref_seq_length;
         generate_run_summaryReport(parameters, SDDdata);

@@ -22,6 +22,8 @@ actual_dose_delivered_data                  = ""                      # Path to 
 random_seed                                 = 0                       # Specify the seed number if the RNG needs to be initialized with a fixed seed
                                                                       # If 0, system will automatically generate random seeds completely random
 
+number_of_threads                           = 1                       # Specify the number of  threads you want to use to run the program. Default is 1
+
 reference_genome_FASTAfile                  = default                 # Path to the reference genome file. Default path is hard-coded, but user can change.
 
 acceptable_difference_in_seq_length_percent = 10                      # Specify what is the maximum acceptable difference in the lengths of the reference genome provided 

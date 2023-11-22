@@ -32,6 +32,10 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
     }
     
     dataFolderPath = *dataPath;
+    if(!checkFolderExists(dataFolderPath.c_str())){                // Check if the environment variable set by the user is pointing to the right directory
+        std::cerr<<"\n ERROR: Unable to find the environment variable \"RADISEQ_DATA_DIR\" path correctly. The path provided is "<<dataFolderPath<<"\n";
+        exit(EXIT_FAILURE);
+    }
     // Defining data filenames w.r.t the variable dataFolderPath
     default_parameter_file = dataFolderPath+default_parameter_file_name;
     reference_genome_file = dataFolderPath+reference_genome_file_name;
@@ -42,10 +46,11 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
 
     success_parameter();                                           // Check if provided parameters meet all conditions and if it is appropriate
 
-    if(get_random_seed()){                                         // If user provided a non-zero seed value for the RNG
-        rng::initFixedSeed(get_random_seed());                     // Initiate the RNG with the fixed seed
+    int nThreads = get_number_of_threads();                        // Get the number of threads user is asking (default is 1)
+    if(get_random_seed()){                                         // If user provided a non-zero seed value for the RNG (default is 0)
+        rng::initThreadLocalFixedSeed(get_random_seed(), nThreads);// Initiate local instances of the RNG with the fixed seed
     }else{
-        rng::initRandomSeed();                                     // Otherwise, initiate the RNG with a random seed
+        rng::initThreadLocalRandomSeed(nThreads);                  // Otherwise, initiate the RNG with a random seed
     }
 }
 //--------------------------------------------------------------------------------------------
@@ -60,6 +65,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     if (*paramName == "random_seed"){
         set_random_seed(paramValue);
     }
+    else if (*paramName == "number_of_threads"){
+        set_number_of_threads(paramValue);
+    } 
     else if (*paramName == "merge_damages_from_multiple_particles"){
         set_merge_damages_from_particles(paramName, paramValue);
     } 
@@ -153,6 +161,11 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
 void NGSParameters::set_random_seed(std::string* paramValue){
     random_seed = static_cast<unsigned int>(std::stoi(*paramValue));
 }
+void NGSParameters::set_number_of_threads(std::string* paramValue){
+    if(std::stoi(*paramValue) > 0){                                                           // Set this parameter only if user specified a non-zero +ve value. Else default
+        number_of_threads = atoi(paramValue->c_str());                                        // Converting the parameterValue to an int
+    }
+}
 void NGSParameters::set_merge_damages_from_particles(std::string* paramName,std::string* paramValue){
     if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
         is_merge_damages = (lowercaseString(paramValue) == "true");                           // Gets 1 if "True" or "true"; else 0
@@ -177,8 +190,8 @@ void NGSParameters::set_sddfile_path(std::string* paramValue){
 }
 void NGSParameters::set_adjust_damages_with_actual_dose(std::string* paramName, std::string* paramValue){
    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
-        is_adjust_dose = (lowercaseString(paramValue) == "true");                              // Gets 1 if "True" or "true"; else 0
-    }else{                                                                                     // If user provided unrecognized value format, print help
+        is_adjust_dose = (lowercaseString(paramValue) == "true");                             // Gets 1 if "True" or "true"; else 0
+    }else{                                                                                    // If user provided unrecognized value format, print help
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_adjust_damages_with_actual_dose()<<"\" -----\n";
     } 
@@ -215,6 +228,11 @@ void NGSParameters::set_read_length(int sequencer_index){                       
 void NGSParameters::set_read_quality_profiles(int sequencer_index){
     r1_quality_profile = dataFolderPath+"/"+list_r1_quality_profiles[sequencer_index];
     r2_quality_profile = dataFolderPath+"/"+list_r2_quality_profiles[sequencer_index];
+    if(!checkFileExists(&r1_quality_profile)){
+        std::cerr<<"\n ERROR: Invalid RADISEQ_DATA_DIR or Missing files\n"
+                 <<" The read quality files cannot be found at "<<dataFolderPath<<"\n";
+        exit(EXIT_FAILURE);
+    }
 }
 void NGSParameters::set_sequencing_mode(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "single"||lowercaseString(paramValue) == "bulk"){
@@ -294,6 +312,9 @@ void NGSParameters::set_summary_report(std::string* paramName, std::string* para
 //--------------------------------------------------------------------------------------------
 unsigned int NGSParameters::get_random_seed(){
     return(random_seed);
+}
+int NGSParameters::get_number_of_threads(){
+    return(number_of_threads);
 }
 bool NGSParameters::get_merge_damages_from_particles(){
     return(is_merge_damages);
@@ -480,7 +501,7 @@ void NGSParameters::success_parameter(){
 
     // If user wants to merge damages from multiple particles: 
     if(get_merge_damages_from_particles()){
-        int reqSize = get_num_of_particles_to_merge();                                          // Get the number of particles to merge
+        size_t reqSize = static_cast<size_t>(get_num_of_particles_to_merge());                  // Get the number of particles to merge
         //check if an appropriate number of SDD files are provided
         if (reqSize != (get_sddfile_path()).size()){                                            // Exit with an error if number of SDD paths given not matches with reqired number
             std::cerr<<"\n ERROR: Mismatch between the number of particles to merge("<<reqSize<<") and the number of SDD files provided("<<(get_sddfile_path()).size()<<")"<<'\n';
@@ -495,7 +516,7 @@ void NGSParameters::success_parameter(){
             exit(EXIT_FAILURE);
         }else{
             double total_rel_dose{0};                                                           // Temporary variable to hold the total relative dose contribution
-            for (int i=0;i<reqSize;i++){
+            for (size_t i=0;i<reqSize;i++){
                 total_rel_dose += (get_relative_dose_contributions())[i];                       // Calculate the total relative dose contribution given
             }
             if (total_rel_dose != 1.0){                                                         // If total relative dose is not equal to 1, print error and exit
@@ -521,7 +542,7 @@ void NGSParameters::success_parameter(){
     }
 
     // User MUST provide a valid path(s) to SDD file(s). If not, exit with error
-    for (auto element : get_sddfile_path()){                                                     // Iterate through each element of the vector sddfile_path
+    for (auto element : get_sddfile_path()){                                                    // Iterate through each element of the vector sddfile_path
         if (!checkFileExists(&element)){
             std::cerr<<"\n ERROR: Unable to read the SDD file : "<< element<<'\n';
             temp_str= "sddFilePath"; help_parameter(&temp_str);
@@ -533,7 +554,7 @@ void NGSParameters::success_parameter(){
 
     // If user wants to adjust the damages according to the actual dose delivered in each exposure
     if(get_adjust_damages_with_actual_dose()){
-        int reqSize = (get_sddfile_path()).size();                                              // Get the number of SDD files provided
+        size_t reqSize = (get_sddfile_path()).size();                                           // Get the number of SDD files provided
         //check if an appropriate number of actual dose delivered files are provided
         if (reqSize != (*get_actual_dosefile_path()).size()){                                   // Exit with an error if number actual dose delivered files paths given not matches with reqired number
             std::cerr<<"\n ERROR: Mismatch between the number of particles to merge("<<reqSize<<") and the number of actual dose delivered files provided("<<(*get_actual_dosefile_path()).size()<<")"<<'\n';

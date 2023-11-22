@@ -22,12 +22,12 @@ random_seed                                 = 1234                     # Specify
 
 reference_genome_FASTAfile                  = ./example_test/test_fasta.fa                    # Path to the reference genome file if user wants to specify one. Else default
 
-output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
+output_directory_path                       = ./example_test/output                # Path to the directory where the output fastq files should be stored
 
 illumina_sequencer                          = test               # Name of the Illumina sequencer to be used for sequencing. Only the following names
                                                                       # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
 
-single_or_bulk_sequencing                   = bulk                  # Specify if single-cell or bulk-cell sequencing to be done. It can either be set to 'single' or 'bulk'
+single_or_bulk_sequencing                   = single                  # Specify if single-cell or bulk-cell sequencing to be done. It can either be set to 'single' or 'bulk'
                                                                       # 'single' or 'bulk'
 
 number_of_cells_in_sample                   = 10                     # Total number of cells you assume to have in your sample. This is different from the number of cells to sequence.

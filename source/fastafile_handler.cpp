@@ -235,11 +235,11 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
 // generated sequence will be in the direction 3'-5' if the original was 5'-3'. This new sequence
 // will be stored in the reference string object called revComp_chromSeq
 //--------------------------------------------------------------------------------------------
-void getReverseComplementarySeq(std::string& chromSeq, std::string& revComp_chromSeq){
+void getReverseComplementarySeq(const std::string& chromSeq, std::string& revComp_chromSeq){
     revComp_chromSeq.clear();                                                                             // Clear the string if there is previous seq
     revComp_chromSeq.resize(chromSeq.size());                                                             // Resize as with the forward sequence
-    for(int i=0; i<chromSeq.size(); i++){
-        int k=chromSeq.size()-i-1;                                                                        // Indexing is reversed to get reverse strand
+    for(size_t i=0; i<chromSeq.size(); i++){
+        size_t k=chromSeq.size()-i-1;                                                                        // Indexing is reversed to get reverse strand
         switch(chromSeq[i]){
             case 'A':                                                                                     // Generate complementary base values accordingly
                 revComp_chromSeq[k]='T'; break;
@@ -433,7 +433,7 @@ void getReverseComplementarySeq(std::string& chromSeq, std::string& revComp_chro
 // damaged genomes instead of using the file itself. If this function is called multiple times,
 // this approach reduces the I/O operations on a large file hence improving performance. 
 //--------------------------------------------------------------------------------------------
-int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPath, const std::string& fileName, char* genomeTemplate_data, size_t templateSize) {
+int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPath, const std::string& fileName, char* genomeTemplate_data, size_t templateSize, int groupTID){
     size_t outFileSize = templateSize+10000;                                                                    // Temporary variable to hold the size of the current file being processed. This get dynamically changed if needed. Starts with undamagedfile size +10kb extra
     std::string outFilePath = outputPath+fileName;                                                              // Path to the output fasta file that we want to write
     char* outFileMapping = createMemoryMappedFile(outFilePath,outFileSize);                                     // Create a memory mapped output file for each damaged cell genome
@@ -446,11 +446,11 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
     std::string chromID_B;
     std::string chromSeq_B;
     long seqStartIndex = 0;                                                                                     // Variable that will hold the starting index for each chromsome sequence in the genome
-    std::vector<long>& baseDamageLoc1 = SDDdata.get_basestrand1_damage_loc();                                   // Referencing the damage location vector to a temp vector for ease of handling
-    std::vector<long>& baseDamageLoc2 = SDDdata.get_basestrand2_damage_loc();
-    std::vector<long>& strandbreakLoc1 = SDDdata.get_backbone1_break_loc();
-    std::vector<long>& strandbreakLoc2 = SDDdata.get_backbone2_break_loc();
-    int i{0}; int j{0}; int k{0}; int l{0};                                                                     // Counter variables to keep a tab on the elements in the damage location vector that we already processed
+    std::vector<long>& baseDamageLoc1 = SDDdata.get_basestrand1_damage_loc(groupTID);                           // Referencing the damage location vector to a temp vector for ease of handling
+    std::vector<long>& baseDamageLoc2 = SDDdata.get_basestrand2_damage_loc(groupTID);
+    std::vector<long>& strandbreakLoc1 = SDDdata.get_backbone1_break_loc(groupTID);
+    std::vector<long>& strandbreakLoc2 = SDDdata.get_backbone2_break_loc(groupTID);
+    size_t i{0}; size_t j{0}; size_t k{0}; size_t l{0};                                                         // Counter variables to keep a tab on the elements in the damage location vector that we already processed
     const int batchSize = 100;                                                                                  // Define a batch size for writing data to the output file. These much data will be stored in cache before writing it on the file
     std::vector<std::string> batch_buffer;                                                                      // Create a buffer for storing output data.
     size_t position = 0;                                                                                        // Temporary variable to hold the last read position in the memory map
@@ -480,7 +480,7 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
         long A_segment_start{0};                                                                                // Temporary variale that wiil hold the starting location of each DNA segment in forward strand and update its value when a new segment is found
         long A_segment_length;
         int A_segment_index{1};                                                                                 // Temporary index variable to name each DNA segment in forward strand 
-        if(strandbreakLoc1.size() !=0){                                                                         // If there are strand breaks present in the forward strand, then
+        if(k<strandbreakLoc1.size()){                                                                           // If there are unprocessed strand breaks present in the forward strand, then
             while(k<strandbreakLoc1.size()){
                 if(strandbreakLoc1[k]<=(seqStartIndex+seq_length)){                                             // If the strand break is within the chromosome that is being processed, then split sequencence into segments at each break point
                     batch_buffer.push_back(chromID_A+"_segment_"+std::to_string(A_segment_index)+"\n");
@@ -511,7 +511,7 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
         long B_segment_end{seq_length};                                                                         // Temporary variable holding the end location of each segment in reverse strand
         long B_segment_length;
         int B_segment_index{1};                                                                                 // Temporary index variable to name each DNA segment of reverse strand
-        if(strandbreakLoc2.size()!=0){                                                                          // If there are strand breaks present in reverse strand, then
+        if(l<strandbreakLoc2.size()){                                                                           // If there are unprocessed strand breaks present in reverse strand, then
             while(l<strandbreakLoc2.size()){                                                            
                 if(strandbreakLoc2[l]<=(seqStartIndex+seq_length)){                                             // If the strand break is within the chromosome that is being processed, then split sequencence into segments at each break point
                     batch_buffer.push_back(chromID_B+"_segment_"+std::to_string(B_segment_index)+"\n");
@@ -539,7 +539,10 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
         }
 
         if (batch_buffer.size() >= batchSize) {                                                                 // Check if the batch buffer is full, and write it to the file if needed.
-            writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);
+ //           #pragma omp critical
+            {
+                writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);
+            }
         }
         /* // Breaking chromosomes into segments, wherever there is a DSB 
         long A_segment_start{0};                                                                                // Temporary variale that wiil hold the starting location of each DNA segment in forward strand and update its value when a new segment is found
@@ -583,7 +586,10 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
 
         seqStartIndex += seq_length;
     }
-    writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);                 // If there are unwritten data in batch buffer, write that too when the loop ends
+//    #pragma omp critical
+    {
+        writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);                 // If there are unwritten data in batch buffer, write that too when the loop ends
+    }
     if (msync(outFileMapping, outFileSize, MS_SYNC) == -1) {                                                    // After writing your data to the memory-mapped file using mmap, before closing the file, call msync to flush/sync the changes.
         perror("\nERROR: Failed to synchronize memory-mapped data to file.\n");
     }

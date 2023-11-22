@@ -7,10 +7,12 @@
 #include <ctime>
 #include <iomanip>
 #include <vector>
+#include <numeric>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+#include <omp.h>
 
 #include "fileio.h"
 #include "summary_report.h"
@@ -92,27 +94,41 @@ void readParameterFile(const std::string* paramfile, NGSParameters& parameter){
 
 
 //------------------------------------------------------------------------------------------------------------------------
-// A function to count the number of exposure entries included in an SDD file
+// A function to count the number of exposure entries included in an SDD file and also to build a list of lines locations
+// that corresponds to the starting of new exposures. This list will have (number of exposure +1) elements. The last 
+// element would be the end position of the SDD file
 //------------------------------------------------------------------------------------------------------------------------
-int countExposuresSDD(const std::string* sddfile){
+int countExposuresSDD(const std::string* sddfile, std::vector<std::streampos>& exposureLines){
+    if(!checkFileExists(sddfile)){
+        std::cerr<<"\n ERROR: The SDD file provided: "<<*sddfile<<" is invalid\n";
+        exit(EXIT_FAILURE);
+    }
     std::ifstream Sfile(*sddfile);                                                                        // Starting an ifstream instance with SDD filename
     std::string line;                                                                                     // Temporary variable to hold each line read
     bool end_of_header_found(false);                                                                      // A flag to check if the end of the header reached
-    int exp_count(1);                                                                                     // Counter for every new exposure found. Default is 1.
+    int exp_count(0);                                                                                     // Counter for every new exposure found. Default is 0.
+    std::streampos current_line;                                                                          // Temporary variable to store the starting position of the line that is currntly read
 
     while(std::getline(Sfile, line)){                                                                     // Loop through each line in the file
-        if (!line.empty()){                                                                               // Process only non-empty lines
+        if(line.empty()){
+            current_line = Sfile.tellg();                                                                 // Get the end position of the current line that is being read. This would be the starting position of the next
+            continue;
+        }else{                                                                                            // Process only non-empty lines
             if(!end_of_header_found){
                 if(line[0]=='*'){                                                                         // End of the header line starts with '*' character
                     end_of_header_found = true;
                 }
+                current_line = Sfile.tellg();                                                             // Get the end position of the current line that is being read. This would be the starting position of the next
                 continue;
             }
             if(line[0] == '2'){                                                                           // New exposure entries starts with 2 in data field 1
                 exp_count++;                                                                              // Increment the exposure counter
+                exposureLines.push_back(current_line);                                                    // Add current line to the list of all new exposure lines
             }
+            current_line = Sfile.tellg();                                                                 // Get the position following the current line that was just read. This would be the starting position of next line
         }
     }
+    exposureLines.push_back(current_line);                                                                // Store the final position in the file after all lines are read
     return exp_count;
 }
 //------------------------------------------------------------------------------------------------------------------------
@@ -125,6 +141,10 @@ int countExposuresSDD(const std::string* sddfile){
 // If the data entries in the file are fewer than the lineCount, print ERROR and exit 
 //------------------------------------------------------------------------------------------------------------------------
 std::vector<double> readActualDosefile(const std::string* dosefile, int lineCount){
+    if(!checkFileExists(dosefile)){
+        std::cerr<<"\n ERROR: The dose file provided: "<<*dosefile<<" is invalid\n";
+        exit(EXIT_FAILURE);
+    }
     std::ifstream Dfile(*dosefile);                                                                       // Starting an ifstream instance with SDD filename
     std::string line;                                                                                     // Temporary variable to hold each line read
     std::vector<double> vec;                                                                              // Temporary vector to store the read lines (dose values)
@@ -133,22 +153,22 @@ std::vector<double> readActualDosefile(const std::string* dosefile, int lineCoun
     // Loop through each line in the file
     while(std::getline(Dfile, line)){
         
-        if(!Dfile.eof() && !line.empty() && lineCount>=1){                                               // If the non-empty line is not the last line and we need dose values still
-            vec.push_back(std::stod(line));                                                              // Append the dose value to the temporary vector
-            lineCount--;                                                                                 // Decrement the number of lines to read
-        }else if(Dfile.eof() && !line.empty() && lineCount==1){                                          // If it is the last non-empty line, but we only need one more data value (same line)
-            vec.push_back(std::stod(line));                                                              // Append the dose value to the temporary vector
-            lineCount--;                                                                                 // Decrement the number of lines to read
+        if(!Dfile.eof() && !line.empty() && lineCount>=1){                                                // If the non-empty line is not the last line and we need dose values still
+            vec.push_back(std::stod(line));                                                               // Append the dose value to the temporary vector
+            lineCount--;                                                                                  // Decrement the number of lines to read
+        }else if(Dfile.eof() && !line.empty() && lineCount==1){                                           // If it is the last non-empty line, but we only need one more data value (same line)
+            vec.push_back(std::stod(line));                                                               // Append the dose value to the temporary vector
+            lineCount--;                                                                                  // Decrement the number of lines to read
         }
 
-        if(lineCount==0){break;}                                                                         // If enough dose values are already read, break the loop
-        if(!line.empty()){missingEntries--;}                                                             // count the number of non-empty lines and subtract it from total required entries to get missing data count 
+        if(lineCount==0){break;}                                                                          // If enough dose values are already read, break the loop
+        if(!line.empty()){missingEntries--;}                                                              // count the number of non-empty lines and subtract it from total required entries to get missing data count 
     }
-    if(lineCount!=0){                                                                                    // If enough dose values are not present in the file, print error and exit   
+    if(lineCount!=0){                                                                                     // If enough dose values are not present in the file, print error and exit   
         std::cerr<<"\n ERROR: The "<<*dosefile<<" is missing "<<missingEntries<<" more data entries than required \n";
         exit(EXIT_FAILURE); 
     }
-    return std::move(vec);                                                                                // move() transfers the ownership of the memory to the caller of the function. This avoids copying the entire vector
+    return (vec);                                                                                         // return the vector
 }
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -158,6 +178,10 @@ std::vector<double> readActualDosefile(const std::string* dosefile, int lineCoun
 // A function to read any file that is formatted like an SDD file and get specific header fields 
 //------------------------------------------------------------------------------------------------------------------------
 void readSDDfileHeader(const std::string* sddfile, NGSsdd& SDDdata){
+    if(!checkFileExists(sddfile)){
+        std::cerr<<"\n ERROR: The SDD file provided: "<<*sddfile<<" is invalid\n";
+        exit(EXIT_FAILURE);
+    }
     std::ifstream Sfile(*sddfile);                                                                        // Starting an ifstream instance with SDD filename
     std::string line;                                                                                     // Temporary variable to hold each line read
     
@@ -181,38 +205,45 @@ void readSDDfileHeader(const std::string* sddfile, NGSsdd& SDDdata){
 
 
 //------------------------------------------------------------------------------------------------------------------------
-// A function to read any file that is formatted like an SDD file and get the data fields. This function will read
-// one exposure data at a time. The second time the function is called, it will read the second exposure data and so on. 
+// This function will read one exposure data from one SDD file at a time completely independantly depending on the values
+// of SDDfilenumber and exposureNum parameters passed. Function then sets all the essential SDD data fields 
 //------------------------------------------------------------------------------------------------------------------------
-void readSDDfileData(const std::string* sddfile, NGSsdd& SDDdata, int SDDfilenumber){
-    std::ifstream Sfile(*sddfile);                                                                        // Starting an ifstream instance with SDD filename
-    std::string line;                                                                                     // Temporary variable to hold each line read
-    SDDdata.reset_original_num_damages();                                                                 // Reset the damage counter before the new exposure data or new SDD is read
-    std::vector<std::streampos>& pos = *SDDdata.get_lines_read_sdd();
-    bool end_of_header_found(true);                                                                       // A flag to check if the end of the header reached
-    
-    if (pos[SDDfilenumber]== 0){                                                                          // If the position is set to be the beggining of the file, then
-        end_of_header_found = false;                                                                      // Set the flag to say that the header is not found yet
-    }
-    Sfile.seekg(pos[SDDfilenumber]);                                                                      // Get the position of the last line that was read for the SDD
-    while(std::getline(Sfile, line)){
-        if(!line.empty()){
-            if(!end_of_header_found){                                                                     // Ignore everything before the end of header. Find header in the first pass
-                if(line[0]=='*'){                                                                         // End of the header line starts with '*' character
-                    end_of_header_found = true;
-                }
-                continue;
+void readSDDfileData(const std::string* sddfile, NGSsdd& SDDdata, int SDDfilenumber, int exposureNum, std::vector<std::string>& lineStack, int groupTID){
+    #pragma omp single
+    {
+        std::ifstream Sfile(*sddfile);                                                                    // Starting an ifstream instance with SDD filename
+        std::string line;                                                                                 // Temporary variable to hold each line read
+        std::streampos start_pos = SDDdata.get_exposureLines(SDDfilenumber, exposureNum);                 // Get the line number corresponding to the start of exposure in this SDD file
+        std::streampos end_pos = SDDdata.get_exposureLines(SDDfilenumber, exposureNum+1);                 // Get the line number corresponding to the end of this exposure data in this SDD file
+        lineStack.clear();                                                                                // Empty the vector for each SDD file
+        Sfile.seekg(start_pos);                                                                           // Set the position of the stream to the starting of new exposure data 
+        std::streampos currentPos = Sfile.tellg();                                                             
+        while(currentPos < end_pos){                                                                      // Process only the lines that correspond to this exposure data
+            std::getline(Sfile, line);  
+            if(!line.empty()){
+                lineStack.push_back(line);                                                                // Populate the lineStack vector
             }
-
-            // If the line is after header and before the new exposure entries
-            SDDdata.set_all_sdd_data_fields(&line);
-
-            if(Sfile.peek() == '2'){                                                                      // Process only upto the beginning of a new exposure data
-                SDDdata.set_lines_read_sdd(Sfile.tellg(), SDDfilenumber);                                 // Store the position of the new exposure data and return from function
-                return;
-            }
+            currentPos = Sfile.tellg();
         }
     }
+    #pragma omp barrier
+
+    if(!lineStack.empty()){                                                                               // If the line stack is not empty
+        #pragma omp single
+        {
+            int nWorkThreads = omp_get_num_threads();
+            SDDdata.reset_workThread_data_holders(groupTID);                                              // Reset all sub-group thread data holding parameters
+            SDDdata.init_set_workThread_data_holders(groupTID, nWorkThreads);                             // Resize all sub-group thread data holding vectors
+        }
+        #pragma omp barrier
+        #pragma omp for
+        for(size_t i=0; i<lineStack.size(); i++){                                                         // Iterate over the line stack and process each line independantly
+            int workerTID = omp_get_thread_num();                                                         // Get the worker thread ID
+            SDDdata.set_all_sdd_data_fields(&lineStack[i], groupTID, workerTID);
+        }
+    }
+
+    return;
 }
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -354,10 +385,10 @@ int getNextChromSeq(std::ifstream& ref_seq, std::string& chrom_seq, std::string&
 // the chromosome sequence. By calling this function in a loop, we can get all the chromosome seqs one-by-one
 //------------------------------------------------------------------------------------------------------------------------
 int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position, std::string& chrom_seq, std::string& chromSeq_ID) {
-    chrom_seq.clear();  // Clear the previously stored value if any
-    chromSeq_ID.clear();  // Clear the previously stored value of sequence ID if any
-    std::ostringstream tmpStringBuffer;  // Temporary Buffer string to store sequence strings to be combined
-    int success_flag = 0;  // This will return 0 if no more sequences are left to read
+    chrom_seq.clear();                                                                                    // Clear the previously stored value if any
+    chromSeq_ID.clear();                                                                                  // Clear the previously stored value of sequence ID if any
+    std::ostringstream tmpStringBuffer;                                                                   // Temporary Buffer string to store sequence strings to be combined
+    int success_flag = 0;                                                                                 // This will return 0 if no more sequences are left to read
 
     if (position >= refSize) {                                                                            // If we've reached the end of the memory-mapped data, return 0.
         return 0;  
@@ -377,7 +408,6 @@ int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position,
         position = end + 1;                                                                               // Move the position to the next line
         
         // Get the strand sequence
-        size_t start = position;
         while (position < refSize && refSeqData[position] != '>') {
             if (!(std::isspace(refSeqData[position]) || refSeqData[position] == '\n' || refSeqData[position] == '\r' || refSeqData[position] == '\t')) {
                 chrom_seq += refSeqData[position];
@@ -678,7 +708,7 @@ void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std
         double denominator = cumulative_frequency[cumulative_frequency.size()-1] / 1000000.0;             // denominator = Total cumulative frequency / 1000000
         std::map<unsigned int, unsigned short> distribution;                                                
 
-        for(int i=0; i<cumulative_frequency.size(); i++){
+        for(size_t i=0; i<cumulative_frequency.size(); i++){
             unsigned int cc = static_cast<unsigned int>(ceil(cumulative_frequency[i]/denominator));           
             distribution[cc] = quality_score[i];
         }
@@ -710,6 +740,12 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     }else{
         report_file<<" The random seed used for this run                                    : "<<parameter.get_random_seed()<<"\n";
     }
+    if(parameter.get_number_of_threads() == 1){
+        report_file<<" Multi-threading option                                               : Disabled\n";
+    }else{
+        report_file<<" Multi-threading option                                               : Enabled\n"
+                   <<" Number of threads used for the run                                   : "<<parameter.get_number_of_threads()<<"\n";
+    }
     report_file<<" The parameter file specified                                         : "<<report_parameterFileName<<"\n\n"
                <<" ------ SDD file information -------\n"
                <<" Number of cells irradiated in the Monte Carlo Simulation             : "<<SDDdata.get_num_of_exposures()<<"\n";
@@ -724,7 +760,7 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         report_file<<"\n These SDD files are generated with the primary particles             : ";
         for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
             if(i!=0) report_file<<", ";
-            if(i>parameter.get_names_of_particles_to_merge()->size()-1) report_file<<"Unspecified";
+            if(i>static_cast<int>(parameter.get_names_of_particles_to_merge()->size())-1) report_file<<"Unspecified";
             else {
                 const std::vector<std::string>* particle_names = parameter.get_names_of_particles_to_merge();
                 report_file<<(*particle_names)[i];
@@ -733,7 +769,7 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         report_file<<"\n The relative dose contributions of these particles                   : ";
         for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
             if(i!=0) report_file<<", ";
-            if(i>parameter.get_relative_dose_contributions().size()-1) report_file<<"0";
+            if(i>static_cast<int>(parameter.get_relative_dose_contributions().size())-1) report_file<<"0";
             else {
                 report_file<<parameter.get_relative_dose_contributions()[i];
             }
@@ -764,8 +800,6 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         report_file<<" The sequencing protocol used                                         : Single-cell Whole Genome Sequencing\n";
     }else report_file<<" The sequencing protocol used                                         : Bulk-cell Whole Genome Sequencing\n";
     
-    report_file<<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n";
-
     if(parameter.get_paired_end_sequencing()){
         report_file<<" The read generation modality used                                    : Paired-end read generation\n"
                    <<" The mean length of DNA fragments created in the sample               : "<<parameter.get_mean_DNA_fragment_length()
@@ -775,9 +809,16 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     int total_reads = std::round(parameter.get_total_read_coverage()*report_ref_seq_length)/parameter.get_read_length();
     report_file<<" Total number of cells in the sample                                  : "<<parameter.get_num_of_cells_in_sample()<<"\n"
                <<" Number of cells randomly sampled from the sample pool for sequencing : "<<parameter.get_num_of_cells_to_sequence()<<"\n"
-               <<" Total number reads generated in the NGS simulation (expected)        : "<<total_reads<<"\n"
-               <<" Average number of reads generated per cell                           : "<<total_reads/parameter.get_num_of_cells_to_sequence()<<"\n"
-               <<" Maximum number of errors allowed per read                            : ";
+               <<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n"
+               <<" Total number reads generated in the NGS simulation (expected)        : "<<total_reads<<"\n";
+    if(*parameter.get_sequencing_mode() == "bulk"){
+        report_file<<" The number of reads actually generated                               : "<<std::accumulate(report_readsGenerated_perCell.begin(),report_readsGenerated_perCell.end(),0)<<"\n";
+    }
+    report_file<<" Average number of reads generated per cell                           : "<<total_reads/parameter.get_num_of_cells_to_sequence()<<"\n"
+               <<" Total read coverage obtained                                         : "<<parameter.get_total_read_coverage()<<"\n"
+               <<" The mean read coverage per cell                                      : "<<parameter.get_total_read_coverage()/parameter.get_num_of_cells_to_sequence()<<"\n";
+    
+    report_file<<" Maximum number of errors allowed per read                            : ";
     if(parameter.get_max_errors_in_read()<0) report_file<<"Unlimited\n";
     else report_file<<parameter.get_max_errors_in_read()<<"\n";
 
@@ -792,14 +833,13 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     } 
     
     if(*parameter.get_sequencing_mode() == "single"){
-        report_file<<" The mean read coverage per cell                                      : "<<parameter.get_total_read_coverage()/parameter.get_num_of_cells_to_sequence()<<"\n"
-                   <<" The directory where the sequenced FASTQ files are stored             : "<<*parameter.get_output_directory()<<"\n\n"
+        report_file<<" The directory where the sequenced FASTQ files are stored             : "<<*parameter.get_output_directory()<<"\n\n"
                    <<" ------ Output data information -------\n\n"
                    <<"------------------------------------------------------------------------------------------------------------\n"
                    <<"|    Name of the cell sequenced                   |    Output FASTQ filename                               |\n"
                    <<"------------------------------------------------------------------------------------------------------------\n";
-        for(int i=0; i<report_cells_sequenced.size(); i++){
-            int cell_name_size = report_cells_sequenced[i].size();
+        for(size_t i=0; i<report_cells_sequenced.size(); i++){
+            size_t cell_name_size = report_cells_sequenced[i].size();
             report_file<<std::left<<std::setw(50)<<"|    "+report_cells_sequenced[i].erase(cell_name_size-3)<<"|    "
                        <<std::left<<std::setw(52)<<report_fastq_output[i]+"_R1.fastq.gz"<<"|\n";
             if(parameter.get_paired_end_sequencing()){
@@ -809,8 +849,7 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         }
         report_file<<"------------------------------------------------------------------------------------------------------------\n";
     }else{ 
-        report_file<<" Total read coverage obtained                                         : "<<parameter.get_total_read_coverage()<<"\n"
-                   <<" The directory where the sequenced FASTQ files are stored             : "<<*parameter.get_output_directory()<<"\n\n"
+        report_file<<" The directory where the sequenced FASTQ files are stored             : "<<*parameter.get_output_directory()<<"\n\n"
                    <<" ------ Output data information -------\n\n"
                    <<" Name of the output FASTQ file                                        : "<<report_fastq_output[0]<<"_R1.fastq.gz";
         if(parameter.get_paired_end_sequencing()){
@@ -820,12 +859,12 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
                    <<"|    Name of the cell sequenced                   |    Percentage read contribution of the cell            |\n"
                    <<"------------------------------------------------------------------------------------------------------------\n";
         std::map<std::string, int> read_contribution;
-        for (int i = 0; i < report_cells_sequenced.size(); i++) {
+        for (size_t i = 0; i < report_cells_sequenced.size(); i++) {
             read_contribution[report_cells_sequenced[i]] += report_readsGenerated_perCell[i];
         }
         for (const auto& entry : read_contribution) {
             std::string cell_name = entry.first;
-            int cell_name_size = cell_name.size();
+            size_t cell_name_size = cell_name.size();
             double percent_read = (entry.second/static_cast<double>(total_reads))*100;
             std::stringstream ss;
             ss << std::fixed << std::setprecision(2) << percent_read;
