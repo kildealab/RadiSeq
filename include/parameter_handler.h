@@ -38,9 +38,10 @@ class NGSParameters{
     int num_of_cells_to_sequence;                                                // Total number of cells to be sequenced (damaged or not) at the end of a single run of this program
     double total_read_coverage;                                                  // Total read coverage: collectively from all cells sequenced
     bool is_paired_end_seq;                                                      // True if user wishes to have paired-end sequencing
-    int mean_DNA_fragment_length;                                                // Mean DNA fragment length in bp (Mandatory input if paired-end)
-    int std_dev_DNA_fragment_length;                                             // Standard deviation in mean DNA fragment length in bp (Mandatory input if paired-end)
-    int max_read_errors;                                                         // Maximum number of errors the program can incorporate in a generated read
+    int min_DNA_fragment_length;                                                 // Minimum size of the DNA fragment in bp to be generated for paired-end sequencing
+    int max_DNA_fragment_length;                                                 // Maximum size of the DNA fragment in bp to be generated for paired-end sequencing
+    double mode_DNA_fragment_length;                                             // Mode value of the DNA fragment size distribution we want to generate
+    double beta_of_beta_distribution;                                            // Beta value of the PDF that we want to use for the beta distribution that will represent the DNA fragment distribution
     double r1_insError_rate;                                                     // Insertion error rate in read 1 
     double r1_delError_rate;                                                     // Deletion error rate in read 1 
     double r2_insError_rate;                                                     // Insertion error rate in read 2 
@@ -117,14 +118,17 @@ public:
     void set_paired_end_sequencing(std::string*, std::string*);                  // function to set 'is_paired_end_seq'
     bool get_paired_end_sequencing();                                            // function to get 'is_paired_end_seq'
 
-    void set_mean_DNA_fragment_length(std::string*);                             // function to set the mean DNA fragment length. Different from read length
-    int get_mean_DNA_fragment_length();                                          // function to get the mean DNA fragment length
-
-    void set_std_dev_DNA_fragment_length(std::string*);                          // function to set the standard deviation in mean DNA fragment length
-    int get_std_dev_DNA_fragment_length();                                       // function to get the standard deviation in mean DNA fragment length
-
-    void set_max_errors_in_read(std::string*);                                   // function to set the maximum number of errors in a read
-    int get_max_errors_in_read();                                                // function to get the maximum number of errors in a read
+    void set_min_DNA_fragment_length(std::string*);                              // function to set the minimum DNA fragment length. Different from read length
+    int get_min_DNA_fragment_length();                                           // function to get the minimum DNA fragment length
+    
+    void set_max_DNA_fragment_length(std::string*);                              // function to set the maximum DNA fragment length
+    int get_max_DNA_fragment_length();                                           // function to get the maximum DNA fragment length
+    
+    void set_mode_DNA_fragment_length(std::string*);                             // function to set the mode value of the DNA fragment length distribution
+    double get_mode_DNA_fragment_length();                                       // function to get the mode value of the DNA fragment length distribution
+    
+    void set_beta_of_beta_distribution(std::string*, std::string*);              // function to set the beta parameter of the beta distribution for the fragment size
+    double get_beta_of_beta_distribution();                                      // function to get the beta parameter of the beta distribution for the fragment size
 
     void set_insertion_error_rate_read1(std::string*);                           // function to set the insertion error rate in read 1 
     double get_insertion_error_rate_read1();                                     // function to get the insertion error rate in read 1 

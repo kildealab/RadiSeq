@@ -124,7 +124,7 @@
 // repectively for two copies. Function also returns the total length of the reference sequence
 // in bp. Function will also populate a memory map of the file for easy handling.
 //--------------------------------------------------------------------------------------------
-long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath){
+long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<double>& ref_chrm_weights){
     char* position_in_MM = templateFileMapping;                                                           // Pointer to the current position in the MM as we write. Starts with the pointer to the beginning
     long seqLength{0};                                                                                    // Find the total length of the genome in bp from ref_seq file  
     if (position_in_MM == nullptr){return 0;}                                                             // Return if the template file memory map is not valid
@@ -139,7 +139,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
     size_t refFileSize;                                                                                   // A variable to hold the file size of the reference genome, during memory-mapping
     void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                              // Create the memory-map of the reference genome file
     const char* refSeqData = static_cast<char*>(refFileMM);                                               // Casting the memory-map void pointer to a const char pointer for further processing
-
+    std::vector<long> chrm_weight;                                                                        // Temporary vector to hold the chromosome sizes before converting it to a weight
     const int batchSize{10};                                                                              // Define a batch size for writing data to the output memory-mapped file. These much data (buffer vector elements) will be stored in cache before writing it on the file
     std::vector<std::string> batch_buffer;                                                                // Create a buffer for storing output data.
 
@@ -152,15 +152,19 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
                 if(nChrms>2){                                                                             // Write according to the mapping 1 pattern
                     batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a\n"+chromSeq+"\n");
                     batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"b\n"+revComp_chromSeq+"\n");
-                    seqLength+=chromSeq.size();                                                           // Increment the reference seq length
+                    long chromSeqSize = static_cast<long>(chromSeq.size());
+                    seqLength+=chromSeqSize;                                                              // Increment the reference seq length
+                    chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});                // Append to the vector the genome size added in each fasta line
                     nChrms--; 
                 }else{                                                                                    // No need to have copies of X, Y chromosomes
-                    batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
-                    batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
-                    seqLength+=chromSeq.size();
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
+                    long chromSeqSize = static_cast<long>(chromSeq.size());
+                    seqLength+=chromSeqSize;                                                              // Increment the reference seq length
+                    chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});                // Append to the vector the genome size added in each fasta line
                     nChrms--;
                 }
-                if (batch_buffer.size() >= batchSize) {                                                   // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
                     writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
                 }    
             }
@@ -174,16 +178,20 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
                     for(int i=0; i<2; i++){                                                               // Write according to the mapping 1 pattern
                         batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
                         batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"b_copy"+std::to_string(i+1)+"\n"+revComp_chromSeq+"\n");
-                        seqLength+=chromSeq.size();
+                        long chromSeqSize = static_cast<long>(chromSeq.size());
+                        seqLength+=chromSeqSize;                                                          // Increment the reference seq length
+                        chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});            // Append to the vector the genome size added in each fasta line
                         nChrms--;
                     } 
                 }else{                                                                                    // No need to have copies of X, Y chromosomes
-                    batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
-                    batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
-                    seqLength+=chromSeq.size();
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
+                    long chromSeqSize = static_cast<long>(chromSeq.size());
+                    seqLength+=chromSeqSize;                                                              // Increment the reference seq length
+                    chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});                // Append to the vector the genome size added in each fasta line
                     nChrms--;
                 }
-                if (batch_buffer.size() >= batchSize) {                                                   // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
                     writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
                 }  
             }
@@ -199,18 +207,22 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
                     if(chrmCount<int(TotalChrms/2)){                                                      // Write the autosomes once in the for loop
                         batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
                         batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"b_copy"+std::to_string(i+1)+"\n"+revComp_chromSeq+"\n");
-                        seqLength+=chromSeq.size();
+                        long chromSeqSize = static_cast<long>(chromSeq.size());
+                        seqLength+=chromSeqSize;                                                          // Increment the reference seq length
+                        chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});            // Append to the vector the genome size added in each fasta line
                         nChrms--;
                     }
                     if (chrmCount>=int((TotalChrms/2)-1) && i==0){                                        // Skip the sex chromosomes in the first for loop and write autosomes again 
                         break;
                     }else if(chrmCount>=int(TotalChrms/2) && i>0){                                        // In the second loop, write the sex chromosomes as well
-                        batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
-                        batch_buffer.push_back(">chrX/Y_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
-                        seqLength+=chromSeq.size();
+                        batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                        batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"b\n"+revComp_chromSeq+"\n");
+                        long chromSeqSize = static_cast<long>(chromSeq.size());
+                        seqLength+=chromSeqSize;                                                          // Increment the reference seq length
+                        chrm_weight.insert(chrm_weight.end(),{0,chromSeqSize,0,chromSeqSize});            // Append to the vector the genome size added in each fasta line
                         nChrms--;
                     }
-                    if (batch_buffer.size() >= batchSize) {                                               // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                    if (batch_buffer.size() >= batchSize){                                                // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
                         writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
                     }
                 }
@@ -224,6 +236,9 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
     } 
     munmap(refFileMM, refFileSize);                                                                       // Unmap the reference genome file to avoid memory-leaks
     writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);              // If there are unwritten data in batch buffer, write that too when the loop ends                 
+    for (long& weight : chrm_weight){
+        ref_chrm_weights.push_back( static_cast<double>(weight)/(seqLength*2));                                                                          // Divide each chromosome length with the total genome length from both strands combined to get the weigts
+    }
     return seqLength;
 }
 //--------------------------------------------------------------------------------------------
@@ -239,7 +254,7 @@ void getReverseComplementarySeq(const std::string& chromSeq, std::string& revCom
     revComp_chromSeq.clear();                                                                             // Clear the string if there is previous seq
     revComp_chromSeq.resize(chromSeq.size());                                                             // Resize as with the forward sequence
     for(size_t i=0; i<chromSeq.size(); i++){
-        size_t k=chromSeq.size()-i-1;                                                                        // Indexing is reversed to get reverse strand
+        size_t k=chromSeq.size()-i-1;                                                                     // Indexing is reversed to get reverse strand
         switch(chromSeq[i]){
             case 'A':                                                                                     // Generate complementary base values accordingly
                 revComp_chromSeq[k]='T'; break;
@@ -433,14 +448,15 @@ void getReverseComplementarySeq(const std::string& chromSeq, std::string& revCom
 // damaged genomes instead of using the file itself. If this function is called multiple times,
 // this approach reduces the I/O operations on a large file hence improving performance. 
 //--------------------------------------------------------------------------------------------
-int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPath, const std::string& fileName, char* genomeTemplate_data, size_t templateSize, int groupTID){
+std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPath, const std::string& fileName, char* genomeTemplate_data, size_t templateSize, long ref_seq_length, int groupTID){
     size_t outFileSize = templateSize+10000;                                                                    // Temporary variable to hold the size of the current file being processed. This get dynamically changed if needed. Starts with undamagedfile size +10kb extra
     std::string outFilePath = outputPath+fileName;                                                              // Path to the output fasta file that we want to write
     char* outFileMapping = createMemoryMappedFile(outFilePath,outFileSize);                                     // Create a memory mapped output file for each damaged cell genome
     char* position_in_MM = outFileMapping;                                                                      // Pointer to the current position in the MM as we write. Starts with the pointer to the beginning
-    if (position_in_MM == nullptr){return 0;}                                                                   // Return if the template file memory map is not valid
+    std::vector<double> chrm_seg_weights;                                                                       // This is a vector to hold the weights of each chromosome segment scaled to its length
+    if (position_in_MM == nullptr){return chrm_seg_weights;}                                                    // Return if the template file memory map is not valid
 
-    int num_of_lines_written{0};                                                                                // This is a variable to hold the total number of lines written to each damage cell file
+    long total_seq_lenth = ref_seq_length*2;                                                                    // Twice the length because it has two strands contributing
     std::string chromID_A;                                                                                      // Strings to hold the chrom IDs and Sequences from the file
     std::string chromSeq_A;
     std::string chromID_B;
@@ -459,16 +475,16 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
         long seq_length = chromSeq_A.size();                                                                    // Sequence length is same for both A and B 
         
         // Introudce Base damages to the forward strand sequence
-        while (i<baseDamageLoc1.size()) {                  
-            if (baseDamageLoc1[i]<=(seqStartIndex + seq_length)) {                                              // If damage location is in the chromsome that is currently prcessing, then
+        while (i<baseDamageLoc1.size()){                  
+            if (baseDamageLoc1[i]<=(seqStartIndex + seq_length)){                                               // If damage location is in the chromsome that is currently prcessing, then
                 chromSeq_A[baseDamageLoc1[i] - seqStartIndex - 1] = 'N';                                        // Replace the nitrogen base at the damage location with 'N'. 1 is subtracted because the chrom_seq index starts from zero
                 i++;                                                                                            // Increment the counter to know where the processing should start next in the damage location vector
             }else {break;}                                                                                      // Break the loop as soon as the damage location is more than the final base location of the chromosome. Works because the list is sorted. 
         }
 
         // Introudce Base damages to the reverse complementary strand sequence
-        while (j<baseDamageLoc2.size()) {
-            if (baseDamageLoc2[j]<=(seqStartIndex + seq_length)) {
+        while (j<baseDamageLoc2.size()){
+            if (baseDamageLoc2[j]<=(seqStartIndex + seq_length)){
                 chromSeq_B[seq_length - (baseDamageLoc2[j] - seqStartIndex)] = 'N';                             // Indexing is different because the strand is not only complementary, but also revesrsed already. Index = chrom_end - (index in Genome - chrom_start)
                 j++;
             } else {break;}
@@ -488,23 +504,26 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
                     batch_buffer.push_back(chromSeq_A.substr(A_segment_start, A_segment_length)+"\n");          // substr(a,b): get b charcters starting from index a 
                     A_segment_start = strandbreakLoc1[k]-seqStartIndex;
                     A_segment_index++; k++;
-                    num_of_lines_written += 2;
+                    chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(static_cast<double>(A_segment_length)/total_seq_lenth)});
                 }else{                                                                                          // If the strand break is not in the chromosome Or if it is the final segment in a chromosome
                     if(A_segment_index!=1){                                                                     // if it is the last segment, write ID with segment tag
                         batch_buffer.push_back(chromID_A+"_segment_"+std::to_string(A_segment_index)+"\n");
                         batch_buffer.push_back(chromSeq_A.substr(A_segment_start)+"\n");
-                        num_of_lines_written += 2;
+                        double substringLength = static_cast<double>(batch_buffer.back().size()-1);
+                        chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(substringLength/total_seq_lenth)});
                     }else{                                                                                      // If the strand break is not in chromosome, write without the segmenet tag
                         batch_buffer.push_back(chromID_A+"\n");    
                         batch_buffer.push_back(chromSeq_A.substr(A_segment_start)+"\n");
-                        num_of_lines_written += 2;
+                        double substringLength = static_cast<double>(batch_buffer.back().size()-1);
+                        chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(substringLength/total_seq_lenth)});
                     }
                     break;
                 }
             }    
         }else{                                                                                                  // If there are no DNA breaks in the forward strand, then just copy the sequence as is without segmenting
             batch_buffer.push_back(chromID_A+"\n"+chromSeq_A+"\n");
-            num_of_lines_written += 2;
+            double seqSize = static_cast<double>(chromSeq_A.size());
+            chrm_seg_weights.insert(chrm_seg_weights.end(),{0,(seqSize/total_seq_lenth)});
         }
         
         // Processing the reverse complementary strand next 
@@ -519,30 +538,30 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
                     batch_buffer.push_back(chromSeq_B.substr((seq_length-(strandbreakLoc2[l]-seqStartIndex)),B_segment_length)+"\n");
                     B_segment_end = seq_length-(strandbreakLoc2[l]-seqStartIndex);                            
                     B_segment_index++; l++;
-                    num_of_lines_written += 2;
+                    chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(static_cast<double>(B_segment_length)/total_seq_lenth)});
                 }else{                                                                                          // If strand break is not in the chromosome Or if it is the final segment in a chromosome
                     if(B_segment_index!=1){                                                                     // if it is the last segment, write ID with segment tag
                         batch_buffer.push_back(chromID_B+"_segment_"+std::to_string(B_segment_index)+"\n");
                         batch_buffer.push_back(chromSeq_B.substr(0,B_segment_end)+"\n");
-                        num_of_lines_written += 2;
+                        double substringLength = static_cast<double>(batch_buffer.back().size()-1);
+                        chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(substringLength/total_seq_lenth)});
                     }else{                                                                                      // If the strand break is not in chromosome, write without the segmenet tag
                         batch_buffer.push_back(chromID_B+"\n");
                         batch_buffer.push_back(chromSeq_B.substr(0,B_segment_end)+"\n");
-                        num_of_lines_written += 2;
+                        double substringLength = static_cast<double>(batch_buffer.back().size()-1);
+                        chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(substringLength/total_seq_lenth)});
                     }
                     break;
                 }
             }
         }else{                                                                                                  // If there are no strand breaks in the reverse strand, then just copy the sequence as is without segmenting
             batch_buffer.push_back(chromID_B+"\n"+chromSeq_B+"\n");
-            num_of_lines_written += 2;
+            double seqSize = static_cast<double>(chromSeq_B.size());
+            chrm_seg_weights.insert(chrm_seg_weights.end(),{0.0,(seqSize/total_seq_lenth)});
         }
 
-        if (batch_buffer.size() >= batchSize) {                                                                 // Check if the batch buffer is full, and write it to the file if needed.
- //           #pragma omp critical
-            {
-                writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);
-            }
+        if (batch_buffer.size() >= batchSize){                                                                  // Check if the batch buffer is full, and write it to the file if needed.
+            writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);
         }
         /* // Breaking chromosomes into segments, wherever there is a DSB 
         long A_segment_start{0};                                                                                // Temporary variale that wiil hold the starting location of each DNA segment in forward strand and update its value when a new segment is found
@@ -586,14 +605,11 @@ int buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::string& outputPat
 
         seqStartIndex += seq_length;
     }
-//    #pragma omp critical
-    {
-        writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);                 // If there are unwritten data in batch buffer, write that too when the loop ends
-    }
-    if (msync(outFileMapping, outFileSize, MS_SYNC) == -1) {                                                    // After writing your data to the memory-mapped file using mmap, before closing the file, call msync to flush/sync the changes.
+    writeBatchToMMFile(batch_buffer, position_in_MM, outFileMapping, outFileSize, outFilePath);                 // If there are unwritten data in batch buffer, write that too when the loop ends
+    if (msync(outFileMapping, outFileSize, MS_SYNC) == -1){                                                     // After writing your data to the memory-mapped file using mmap, before closing the file, call msync to flush/sync the changes.
         perror("\nERROR: Failed to synchronize memory-mapped data to file.\n");
     }
     munmap(outFileMapping, outFileSize);                                                                        // Unmap the memory-map to avoid memory leaks after use
-    return (num_of_lines_written);
+    return (chrm_seg_weights);
 }
 //--------------------------------------------------------------------------------------------

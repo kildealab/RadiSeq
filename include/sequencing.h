@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-void single_cell_sequencing(NGSParameters&, const std::vector<std::string>&, long);
-void bulk_cell_sequencing(NGSParameters&, const std::vector<std::string>&, const std::vector<int>&, long);
+void single_cell_sequencing(NGSParameters&, const std::vector<std::string>&);
+void bulk_cell_sequencing(NGSParameters&, const std::vector<std::string>&, const std::vector<std::vector<double>>&, long);
 
 #endif

@@ -65,7 +65,8 @@ int main(int argc, char* argv[]){
     size_t templateSize = static_cast<size_t>(ref_genomeFile_size*4);                                           // The size of an Undamaged file is estimated to be 4 times the size of the reference sequence file
     char* genomeTemplate_data = createMemoryMappedFile(genomeTemplatePath,templateSize);                        // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
     // Build the UndamagedGenomeTemplate file and the memory map
-    long ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome());
+    std::vector<double> ref_chrm_weights;                                                                         // Vector to store the weights of each chromosomes scaled according to its length
+    long ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome(), ref_chrm_weights);
     long one_fasta_size = fileSize_bytes(tempFolderPath+"/Undamaged_cell.fa");                                  // Calculate the size of the undamaged cell fasta file. This will be the size of every fasta file
     checkStorageSize(parameters, SDDdata, one_fasta_size);                                                      // Check if there is enough storage space to run this program with the given parameters
     // Make sure the difference between the reference genome length and the MC model length is within the required limit
@@ -83,7 +84,8 @@ int main(int argc, char* argv[]){
                          <<" So damages beyond the reference sequence length will be ignored from sequencing. \n";
             }else{                                                                                              // If the reference sequence is smaller than the MC model's genome
                 std::cerr<<"\n WARNING: Reference sequence length ("<<ref_seq_length<<" bp) is bigger "
-                         <<"than the Monte Carlo model genome("<<SDDdata.get_sdd_genome_length()<<" bp). \n";
+                         <<"than the Monte Carlo model genome("<<SDDdata.get_sdd_genome_length()<<" bp). \n"
+                         <<" Expect inaccuracies beyond the Monte Carlo model genome length. \n";
             }
         }
     }
@@ -92,22 +94,21 @@ int main(int argc, char* argv[]){
     // Read each cell (exposure) damage data from the SDD file, adjust the damages according to the relative dose and actual dose delivered if necessary,
     // then combine multiple radiation damages on the same cell if needed, find DSB locations and then build a damaged genome FASTA file for each cell   
     // But do all that, ONLY if the number of damaged data (exposure) is more than 0
-    
     std::vector<double>& rel_dose = parameters.get_relative_dose_contributions();
     std::vector<std::string>& sdd_paths = parameters.get_sddfile_path();                          
-    std::vector<int> lines_in_cell_files{SDDdata.get_num_of_exposures()};                                           // Vector to store the total number of lines written in each damage cell's fasta file
-    
+    std::vector<std::vector<double>> line_weights_in_cell_files{static_cast<size_t>(SDDdata.get_num_of_exposures())};// Vector to store the vector that contains the weights of each line in the cell's fasta file. Weighted according to the segment length
+
     int nThreads_User = parameters.get_number_of_threads();                                                         // Variable holding the number of threads the user requesting for parallel processing
     omp_set_nested(1);                                                                                              // Enable nested parallelism 
     omp_set_num_threads(nThreads_User);                                                                             // Set the number of threads available for OMP as the number user requested
         
-    if(0<SDDdata.get_num_of_exposures()){                                                                           // Attempt building damaged cells only if there is atleast one exposure data
+    if(0<SDDdata.get_num_of_damagedCells_toBuild()){                                                                // Attempt building damaged cells only if we need to build atleast one damaged cell
         std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- \n";  
         int threadGroups{nThreads_User};                                                                            // Variable to hold the number of thread groups we want to create
         int threadPerGroup{1};                                                                                      // Variable to hold the number of equal threads per each group
         int xtraThreads{0};
-        if(SDDdata.get_num_of_exposures()<nThreads_User){                                                           // Check if there are more threads asked than the number of damaged cells
-            threadGroups = SDDdata.get_num_of_exposures();
+        if(SDDdata.get_num_of_damagedCells_toBuild()<nThreads_User){                                                // Check if there are more threads asked than the number of damaged cells that we wish to build
+            threadGroups = SDDdata.get_num_of_damagedCells_toBuild();
             threadPerGroup = nThreads_User/threadGroups;
             xtraThreads = nThreads_User-(threadGroups*threadPerGroup);                                              // Determine how many threads would be xtra if I were to use only threadPerGroup threads within each group
         }
@@ -120,7 +121,7 @@ int main(int argc, char* argv[]){
             }
             #pragma omp barrier                                                                                     // Wait here till all thread groups reach this point
             #pragma omp for                                                                                         // Split the thread group over the for loop
-            for(int i=0; i<SDDdata.get_num_of_exposures(); i++){                                                    // Iterate over each exposure (cell) data
+            for(int i=0; i<SDDdata.get_num_of_damagedCells_toBuild(); i++){                                         // Iterate over each exposure (cell) data, for the cells that we want to build
                 int workerThreads = threadPerGroup;
                 if(i<xtraThreads){workerThreads+=1;}                                                                // Distribute extra threads to the groups
                 int groupTID = omp_get_thread_num();
@@ -146,7 +147,7 @@ int main(int argc, char* argv[]){
                 //SDDdata.find_DNA_breakPoints(parameters.get_dsb_threshold());
                 //-------------- Stage 3: Generating damaged cell genomes -----------------//
                 std::string fastaFileName = "/Damaged_cell_" + std::to_string(i+1) + ".fa";
-                lines_in_cell_files[i] = buildDamagedCellGenome_from_MM(SDDdata, tempFolderPath, fastaFileName, genomeTemplate_data, templateSize, groupTID);
+                line_weights_in_cell_files[i] = buildDamagedCellGenome_from_MM(SDDdata, tempFolderPath, fastaFileName, genomeTemplate_data, templateSize, ref_seq_length, groupTID);
                 #pragma omp critical
                 {
                     std::cout<<"\n Built damage genomes of "<<std::to_string(i+1)<<" cells \n"; 
@@ -165,31 +166,31 @@ int main(int argc, char* argv[]){
     // Randomly sample 'num_of_cells_to_sequence' from 'num_of_cells_in_sample'. First generate a random number in the range of number of cells in sample. If that number is less than the number of damaged cells, then add the 
     // damaged cell fasta filename to the list. If that cell is already added, then repeat. If the random number is greater than the num of damaged cells, then add the undamaged fasta filename to the list. 
     std::vector<std::string> cellGenomes_to_be_sequenced{};                                                     // Vector to store the fasta filenames of the cells to be sequenced
-    std::vector<int> lines_in_cells_to_sequence{};                                                              // Vector to store the total number of lines in the fasta files of cells to be sequenced in order
+    std::vector<std::vector<double>> line_weights_in_cell_to_seq{};                                             // Vector to store the vector that contains the weights of each line in the cell's fasta file that will be sequenced in order. Weighted according to the segment length
     while (cellGenomes_to_be_sequenced.size() < static_cast<size_t>(parameters.get_num_of_cells_to_sequence())){// Iterate till enough number of cells are randomly sampled from the pool of cells for sequencing    
         int cell_id = rng::rand_int(1, parameters.get_num_of_cells_in_sample());                                // Randomly pick an ID for a cell to be sequenced from the sample     
-        if (cell_id <= SDDdata.get_num_of_exposures()){                                                         // If the ID corresponds to a damaged cell, then
+        if (cell_id <= SDDdata.get_num_of_damagedCells_toBuild()){                                              // If the ID corresponds to a damaged cell, then
             std::string damaged_fasta_filename = "Damaged_cell_" + std::to_string(cell_id) + ".fa";
             if (std::find(cellGenomes_to_be_sequenced.begin(), cellGenomes_to_be_sequenced.end(), damaged_fasta_filename) != cellGenomes_to_be_sequenced.end()){
                 continue;                                                                                       // Check if the filename is already in the vector. If yes, continue and pick another cell ID
             }else{
                 cellGenomes_to_be_sequenced.push_back(damaged_fasta_filename);                                  // Else, add the corresponding damaged cell name to the list
-                lines_in_cells_to_sequence.push_back(lines_in_cell_files[cell_id-1]);                           // Add the number of lines that damaged cell file has to the list
+                line_weights_in_cell_to_seq.push_back(line_weights_in_cell_files[cell_id-1]);                   // Add the line weight vector of each damaged cell to the list
             }
         }else{                                                                                                  // If the picked cell ID is beyond the number of damaged cells, add undamaged genome fasta to the list
             cellGenomes_to_be_sequenced.push_back("Undamaged_cell.fa");
-            lines_in_cells_to_sequence.push_back(SDDdata.get_num_chrom()*4);                                    // Undamaged cell file will have a total number of lines = 4 times the number of chromosomes
+            line_weights_in_cell_to_seq.push_back(ref_chrm_weights);
         }
     }
     
     // Perfrom single-cell or bulk-cell sequencing as required
     if (*parameters.get_sequencing_mode() == "single"){
         std::cout<<"\n ----- Initiating Single-cell sequencing of "<<parameters.get_num_of_cells_to_sequence()<<" cells -----\n";
-        single_cell_sequencing(parameters, cellGenomes_to_be_sequenced, ref_seq_length);
+        single_cell_sequencing(parameters, cellGenomes_to_be_sequenced);
         std::cout<<"\n Single-cell sequencing of cells are now complete. You can find the sequenced FASTQ files in the output folder: "<<output_directory<<"\n";
     }else{                                                                                                      // If not single, then the other option is only bulk
         std::cout<<"\n ----- Initiating Bulk-cell sequencing of "<<parameters.get_num_of_cells_to_sequence()<<" cells -----\n";
-        bulk_cell_sequencing(parameters, cellGenomes_to_be_sequenced, lines_in_cells_to_sequence, ref_seq_length);
+        bulk_cell_sequencing(parameters, cellGenomes_to_be_sequenced, line_weights_in_cell_to_seq, ref_seq_length);
         std::cout<<"\n Bulk-cell sequencing of cells are now complete. You can find the sequenced FASTQ files in the output folder: \""<<output_directory<<"\"\n\n";
     }
     
@@ -198,7 +199,7 @@ int main(int argc, char* argv[]){
     // Make the summary report of the run if specified
     if (parameters.get_summary_report()){
         std::chrono::duration<double> duration = end_time - start_time;
-        report_cpu_time_used = duration.count();
+        report_cpu_time_used = std::chrono::duration_cast<std::chrono::minutes>(duration).count();              // Convert the duration to minutes
         report_parameterFileName = user_parameter_file;
         report_ref_seq_length = ref_seq_length;
         generate_run_summaryReport(parameters, SDDdata);

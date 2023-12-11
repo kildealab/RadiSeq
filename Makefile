@@ -26,7 +26,7 @@ else
     CXXFLAGS = -c -Wall -O -g -std=c++17 -fopenmp -I$(INC_DIR)
 endif
 
-LDFLAGS = -fopenmp
+LDFLAGS = -fopenmp -lz
 # LDFLAGS are linker flags
 # -fopenmp link openmp library for parallelization
 # -lrt link against the real-time extensions library (sometimes needed when working with POSIX functions)

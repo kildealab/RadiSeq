@@ -3,6 +3,7 @@
 #include "art_framework.h"
 #include "random_generator.h"
 #include "summary_report.h"
+#include "support_functions.h"
 
 #include <iostream>
 #include <string>
@@ -22,11 +23,12 @@
 // base call errors based on the sequencer's error quality profile. The read data will be 
 // stored to fastq.gz files that correspond to each cell.
 //--------------------------------------------------------------------------------------------
-void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::string>& cellGenomes_to_be_sequenced, long ref_seq_length){
-    double coverage_per_cell = parameter.get_total_read_coverage()/parameter.get_num_of_cells_to_sequence();
+void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::string>& cellGenomes_to_be_sequenced){
+    double coverage_per_cell = parameter.get_total_read_coverage()*0.5/parameter.get_num_of_cells_to_sequence(); // Halved because reads can come from both strands
     ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
     ART::set_baseCall_error_probability();                                                              // Generate base call error probabilty distribution (same for all cells)
-
+    std::vector<double> fragment_weights = beta_distribution_proabalities(parameter.get_beta_of_beta_distribution(), parameter.get_min_DNA_fragment_length(), parameter.get_max_DNA_fragment_length(),parameter.get_mode_DNA_fragment_length());
+                                                                                                        // Generate the fragmentation probability vector for paired-end sequencing
     for (size_t i=0; i<cellGenomes_to_be_sequenced.size(); i++){                                        // Iterate though each cell genome that is to be sequenced to generate reads
         
         std::string cell_fasta_filename = (*parameter.get_output_directory())+"/temp/"+cellGenomes_to_be_sequenced[i];
@@ -46,8 +48,9 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                 // ofstream object of the output fastq file for read 1
         
         ART read1;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
-        read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
-        read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
+        read1.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
+        //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
+        //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
 
         std::string chromSegSeq;                                                                        // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
         std::string chromSegSeq_ID;                                                                     // Temporary variable to hold IDs of each hromosome segment sequence
@@ -77,7 +80,7 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                         #pragma omp single                                                              // This section needs to be done by only one thread
                         {
                             int nThreads_omp = omp_get_num_threads();                                   // Get the actual number of threads available for OpenMP
-                            read1.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
+                            read1.int_set(chromSegSeq, nThreads_omp);
                         }
                         #pragma omp barrier                                                             // Make sure all threads reach this point, before proceeding with the rest
                         #pragma omp for                                                                 // This is where we are splitting the iterations of the for loop to each thread
@@ -88,9 +91,10 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                             read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
                             read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
                             
-                            std::string read_data = "@"+chromSegSeq_ID+"_read"+std::to_string(j)+"\n";  // @readID
+                            std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                   // Remove the '>' symbol from the chrom ID
+                            std::string read_data = "@"+chromID+":read"+std::to_string(j)+"\n";         // @readID
                             read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +
-                            for(size_t k=0; k<read1_quality_score_vec.size(); k++){                     // read quality scores
+                            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores; insert only as many quality values as with the length of sequence
                                 read_data += static_cast<char>(read1_quality_score_vec[k]+33);
                             }
                             read_data += "\n";
@@ -99,7 +103,7 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                             if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the thread's batch buffer is full, and write it to the file if needed.
                                 #pragma omp critical(section1)
                                 {
-                                writeBatchToFile(batch_buffer[threadID], fastq_R1_file);
+                                writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
                                 }
                             }
                         }
@@ -107,7 +111,7 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                 }
             }
             for (size_t l=0;l<batch_buffer.size();l++){
-                writeBatchToFile(batch_buffer[l], fastq_R1_file);                                       // If there are unwritten data in batch buffer, write that too when the loop ends
+                writeBatchToFile(batch_buffer[l], fastq_R1_file, true);                                 // If there are unwritten data in batch buffer, write that too when the loop ends
             }
         }
         // Paired-end sequencing
@@ -116,8 +120,9 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
             std::ofstream fastq_R2_file(output_fastq_R2_filename.c_str(),std::ios::binary);             // ofstream object of the output fastq file for read 2
             
             ART read2;                                                                                  // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
-            read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
-            read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
+            read2.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(),parameter.get_deletion_error_rate_read2());
+            //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
+            //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
                 
             std::vector<std::vector<std::string>> batch_buffer_r1(nThreads_User);                       // Create a buffer for each thread for storing read 1 data.
             std::vector<std::vector<std::string>> batch_buffer_r2(nThreads_User);                       // Create a buffer for each thread for storing read 2 data.
@@ -138,23 +143,24 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                         #pragma omp single                                                              // This section needs to be done by only one thread
                         {
                             int nThreads_omp = omp_get_num_threads();                                   // Get the actual number of threads available for OpenMP
-                            read1.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
-                            read2.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
+                            read1.int_set(chromSegSeq, nThreads_omp);
+                            read2.int_set(chromSegSeq, nThreads_omp);
                         }
                         #pragma omp barrier                                                             // Make sure all threads reach this point, before proceeding with the rest
                         #pragma omp for
                         for(int j=0; j<num_reads_per_segment; j+=2){                                    // Create as many reads per segment in a loop. J is incremented by 2 since two reads are created in one loop (paired end)
                             int threadID = omp_get_thread_num();                                        // Get the ID of each thread being tracked
-                            ART::generate_paired_reads_with_indel(read1, read2, parameter.get_mean_DNA_fragment_length(), parameter.get_std_dev_DNA_fragment_length(), threadID);
+                            ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID);
                                                                                                         // Make two paired-reads from the same DNA fragment with indel errors
                             // Process read 1 first
                             std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
                             read1.get_read_quality(read1_quality_score_vec, 1,threadID);                // Get the read quality scores for the read positions for read 1
                             read1.add_baseCall_error(read1_quality_score_vec,threadID);                 // Add base call errors to the read based on the quality scores on read 2
                             
-                            std::string read1_data = "@"+chromSegSeq_ID+"_read"+std::to_string(j)+"\n"; // @readID
+                            std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                   // Remove the '>' symbol from the chrom ID
+                            std::string read1_data = "@"+chromID+":read"+std::to_string(j)+":1\n";      // @readID
                             read1_data += (*read1.get_final_read_sequence(threadID)) + "\n+\n";         // read sequence and +
-                            for(size_t k=0; k<read1_quality_score_vec.size(); k++){                     // read quality scores
+                            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores
                                 read1_data += static_cast<char>(read1_quality_score_vec[k]+33);
                             }
                             read1_data += "\n";
@@ -164,9 +170,9 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                             read2.get_read_quality(read2_quality_score_vec, 2,threadID);                // Get the read quality scores for the read positions for read 2
                             read2.add_baseCall_error(read2_quality_score_vec,threadID);                 // Add base call errors to the read based on the quality scores on read 2
                             
-                            std::string read2_data = "@"+chromSegSeq_ID+"_read"+std::to_string(j)+"\n"; // @readID
+                            std::string read2_data = "@"+chromID+":read"+std::to_string(j)+":2\n";      // @readID
                             read2_data += (*read2.get_final_read_sequence(threadID)) + "\n+\n";         // read sequence and +
-                            for(size_t k=0; k<read2_quality_score_vec.size(); k++){                     // read quality scores
+                            for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){  // read quality scores
                                 read2_data += static_cast<char>(read2_quality_score_vec[k]+33);
                             }
                             read2_data += "\n";
@@ -176,11 +182,11 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                             if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
                                 #pragma omp critical(section1)
                                 {
-                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file);
+                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
                                 }
                                 #pragma omp critical(section2)
                                 {
-                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file);
+                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
                                 }
                             }
                         }
@@ -188,17 +194,17 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                 }
             }
             for (size_t l=0;l<batch_buffer_r1.size();l++){
-                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
-                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
             }
             fastq_R2_file.close();
         }
         fastq_R1_file.close();
 
-        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                               // To make the report, making a vector of all the cells that were sequenced
+        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                                     // To make the report, making a vector of all the cells that were sequenced
         report_fastq_output.push_back((*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i));
 
-        munmap(fastaFileMM, fastaFileSize);                                                             // Unmap the fasta file of the current cell to avoid memory-leaks
+        munmap(fastaFileMM, fastaFileSize);                                                                   // Unmap the fasta file of the current cell to avoid memory-leaks
     }  
 }
 //--------------------------------------------------------------------------------------------
@@ -211,16 +217,17 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
 // sample, then it will randomly pick a chromosome fragment and randomly generate one read. 
 // The process will be repeated until enough reads are generated randomly.
 //--------------------------------------------------------------------------------------------
-void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::string>& cellGenomes_to_be_sequenced, const std::vector<int>& lines_in_cells_to_sequence, long ref_seq_length ){
-    int total_num_reads = std::round((parameter.get_total_read_coverage()*ref_seq_length)/parameter.get_read_length());
+void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::string>& cellGenomes_to_be_sequenced, const std::vector<std::vector<double>>& line_weight_in_cells_to_sequence, long ref_seq_length ){
+    int total_num_reads = std::round((parameter.get_total_read_coverage()*(ref_seq_length))/parameter.get_read_length());
     int max_num_reads_per_cell = std::round(total_num_reads/parameter.get_num_of_cells_to_sequence());  // Temporary variable to hold the maximum number of reads per cell
     
     ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
     ART::set_baseCall_error_probability();                                                              // Generate base call error probabilty distribution (same for all cells)
     
     ART read1;                                                                                          // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
-    read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
-    read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
+    read1.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
+    //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
+    //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
 
     std::string output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R1.fastq.gz";
     std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                     // ofstream object of the output fastq file for read 1
@@ -244,9 +251,11 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         }               
         
         int reads_will_be_generated_in_cell{0};                                                         // A temporary variable to hold the number of reads that will actually be created from each cell. For single-end seq this number will be equal to reads_to_generate_in_cell
-        int totalLines_in_fasta = lines_in_cells_to_sequence[cell_index];                               // Variable to hold the number of lines in the fasra file of the cell selected
         while (reads_to_generate_in_cell > (readPerFrag-1)){                                            // Randomly generate a list of line numbers that we want to use pick the chrom fragments from the fasta file
-            int line_number = rng::rand_int(1,totalLines_in_fasta);                                     // line_number can take any value from 1 to length of the fasta file
+            int line_number = rng::weighted_rand_int(line_weight_in_cells_to_sequence[cell_index]);     // line_number can take any value from 1 to length of the fasta file
+            if (line_number==0){                                                                        // weighted_rand_int returns 0 if the weight vector of the cell is inappropriate
+                break;                                                                                  // Skip the cell if its weight vector is bad
+            }
             if (line_number %2 == 0){                                                                   // If the generated line number is even, it corresponds to the sequence line, not sequence ID line
                 line_number -= 1;                                                                       // Store the line number corresponding to the sequence ID instead. If the line number is odd, it is already corresponding to the sequence ID postiontion in fasta file
             }
@@ -316,7 +325,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                             #pragma omp single                                                          // This section needs to be done by only one thread
                             {
                                 int nThreads_omp = omp_get_num_threads();                               // Get the actual number of threads available for OpenMP
-                                read1.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
+                                read1.int_set(chromSegSeq, nThreads_omp);
                             }
                             #pragma omp barrier                                                         // Make sure all threads reach this point, before proceeding with the rest
                             #pragma omp for reduction (+:reads_actually_generated)                      // This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
@@ -327,9 +336,11 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                                 read1.get_read_quality(read1_quality_score_vec, 1, threadID);           // Get the read quality scores for the read positions
                                 read1.add_baseCall_error(read1_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores
                                 
-                                std::string read_data = "@"+cellGenomes[cell]+"_"+chromSegSeq_ID+"_read"+std::to_string(reads_actually_generated)+"\n";  // @readID
-                                read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";                                                        // read sequence and +
-                                for(size_t k=0; k<read1_quality_score_vec.size(); k++){                                                                  // read quality scores
+                                std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
+                                std::string chromID = chromSegSeq_ID; chromID.erase(0,1);               // Remove the '>' symbol from the chrom ID
+                                std::string read_data = "@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+"\n";  // @readID
+                                read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";                                        // read sequence and +
+                                for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                               // read quality scores
                                     read_data +=static_cast<char>(read1_quality_score_vec[k]+33);
                                 }
                                 read_data +="\n";
@@ -340,7 +351,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                                 if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
                                     #pragma omp critical(section1)
                                     {
-                                    writeBatchToFile(batch_buffer[threadID], fastq_R1_file);
+                                    writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
                                     }
                                 }
                             }
@@ -367,18 +378,21 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
             report_readsGenerated_perCell.push_back(reads_actually_generated);                          // Storing the number of reads generated per cell in a vector for the final summary report
         }
         for(size_t l=0; l<batch_buffer.size(); l++){
-            writeBatchToFile(batch_buffer[l], fastq_R1_file);
+            writeBatchToFile(batch_buffer[l], fastq_R1_file, true);
         } 
     }
     // Paired-end sequencing
     else{
         ART read2;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
-        read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
-        read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
+        read2.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), parameter.get_deletion_error_rate_read2());
+        //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
+        //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
         
         std::string output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R2.fastq.gz";
         std::ofstream fastq_R2_file(output_fastq_R2_filename.c_str(),std::ios::binary);                 // ofstream object of the output fastq file for read 2
 
+        std::vector<double> fragment_weights = beta_distribution_proabalities(parameter.get_beta_of_beta_distribution(), parameter.get_min_DNA_fragment_length(), parameter.get_max_DNA_fragment_length(),parameter.get_mode_DNA_fragment_length());
+                                                                                                        // Generate the fragmentation probability vector for paired-end sequencing
         std::vector<std::vector<std::string>> batch_buffer_r1(nThreads_User);                           // Create a buffer for each thread for storing read 1 data.
         std::vector<std::vector<std::string>> batch_buffer_r2(nThreads_User);                           // Create a buffer for each thread for storing read 2 data.
         for (size_t cell=0; cell<cellGenomes.size(); cell++){                                           // Iterate through each cell that we want to sequence to do the sequencing
@@ -397,7 +411,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
             std::string chromSegSeq;                                                                    // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
             std::string chromSegSeq_ID;                                                                 // Temporary variable to hold IDs of each hromosome segment sequence
             int end_flag;                                                                               // Flag to indicate the end of memory map sequences
-
+                                
             #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,line_inFile)                // Start the parallel region. Threads will be generated and they will get the specific shared variables
             {
                 int line_num = line_inFile;                                                             // A counter for each thread to check which chromosome segment is being processed from the memory map
@@ -417,35 +431,37 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                             #pragma omp single                                                          // This section needs to be done by only one thread
                             {
                                 int nThreads_omp = omp_get_num_threads();                               // Get the actual number of threads available for OpenMP
-                                read1.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
-                                read2.int_set(parameter.get_read_length(), chromSegSeq, nThreads_omp);
+                                read1.int_set(chromSegSeq, nThreads_omp);
+                                read2.int_set(chromSegSeq, nThreads_omp);
                             }
                             #pragma omp barrier                                                         // Make sure all threads reach this point, before proceeding with the rest
                             #pragma omp for reduction (+:reads_actually_generated)                      // This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
                             for(int i=0; i<line_frequency_map[line_num]; i++){                          // line_frequency_map[line_inFile] gives the frequency of that line in the list, which is equal to the number of reads we want to generate from that line
                                 int threadID = omp_get_thread_num();                                    // Get the ID of each thread being tracked
-                                ART::generate_paired_reads_with_indel(read1, read2, parameter.get_mean_DNA_fragment_length(), parameter.get_std_dev_DNA_fragment_length(), threadID);
+                                ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID);
                                                                                                         // Make two paired-reads from the same DNA fragment with indel errors
                                 // Process read 1 first
                                 std::vector<short> read1_quality_score_vec;                             // Vector to hold the quality scores for read 1
                                 read1.get_read_quality(read1_quality_score_vec, 1, threadID);           // Get the read quality scores for the read positions for read 1
                                 read1.add_baseCall_error(read1_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores on read 2
                                 
-                                std::string read1_data ="@"+cellGenomes[cell]+"_"+chromSegSeq_ID+"_read"+std::to_string(reads_actually_generated)+"\n";   // @readID
-                                read1_data +=(*read1.get_final_read_sequence(threadID))+"\n+\n";                                                    // read sequence and +
-                                for(size_t k=0; k<read1_quality_score_vec.size(); k++){                                                             // read quality scores
+                                std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
+                                std::string chromID = chromSegSeq_ID; chromID.erase(0,1);               // Remove the '>' symbol from the chrom ID
+                                std::string read1_data ="@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+":1\n";   // @readID
+                                read1_data +=(*read1.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
+                                for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
                                     read1_data +=static_cast<char>(read1_quality_score_vec[k]+33);
                                 }
                                 read1_data +="\n";
-
+                                
                                 // Process read 2
                                 std::vector<short> read2_quality_score_vec;                             // Vector to hold the quality scores for read 2
                                 read2.get_read_quality(read2_quality_score_vec, 2, threadID);           // Get the read quality scores for the read positions for read 2
                                 read2.add_baseCall_error(read2_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores on read 2
                                 
-                                std::string read2_data ="@"+cellGenomes[cell]+"_"+chromSegSeq_ID+"_read"+std::to_string(reads_actually_generated+1)+"\n";   // @readID
-                                read2_data +=(*read2.get_final_read_sequence(threadID))+"\n+\n";                                                         // read sequence and +
-                                for(size_t k=0; k<read2_quality_score_vec.size(); k++){                                                                  // read quality scores
+                                std::string read2_data ="@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+":2\n";   // @readID
+                                read2_data +=(*read2.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
+                                for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
                                     read2_data +=static_cast<char>(read2_quality_score_vec[k]+33);
                                 }
                                 read2_data +="\n";
@@ -457,11 +473,11 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                                 if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
                                     #pragma omp critical(section1)
                                     {
-                                        writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file);
+                                        writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
                                     }
                                     #pragma omp critical(section2)
                                     {
-                                        writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file);
+                                        writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
                                     }
                                 }
                             }
@@ -489,8 +505,8 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         }
      
         for (size_t l=0;l<batch_buffer_r1.size();l++){
-            writeBatchToFile(batch_buffer_r1[l], fastq_R1_file);                                        // If there are unwritten data in batch buffer 1, write that too when the loop ends
-            writeBatchToFile(batch_buffer_r2[l], fastq_R2_file);                                        // If there are unwritten data in batch buffer 1, write that too when the loop ends
+            writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                                  // If there are unwritten data in batch buffer 1, write that too when the loop ends
+            writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                                  // If there are unwritten data in batch buffer 2, write that too when the loop ends
         
         }
 

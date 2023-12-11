@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <cstdio>
 #include <algorithm>
+#include <zlib.h>
+#include <stdexcept>
+
 
 //------------------------------------------------------------------------------------------------------
 // This function is used to print the ASCII-art name of the program in the beginning of the output. (Font:Roman)
@@ -180,8 +183,8 @@ void removeAnElement(std::vector<std::string>& vec){
 // of the vector provided. i.e, if vec=[10,20,30,40], and num1=12 and num2=15, since both these numbers
 // are between 10 and 20 (two same consecutive elements), function will return True. 
 //------------------------------------------------------------------------------------------------------
-bool is_nums_in_same_interval(const std::vector<long>& vec, int num1, int num2) {
-    for (size_t i = 0; i<vec.size(); i++) {
+bool is_nums_in_same_interval(const std::vector<long>& vec, int num1, int num2){
+    for (size_t i = 0; i<vec.size(); i++){
         if((i+1)<vec.size()){                                               // Proceed only if it is not the last element in the vector
             if ((num1>vec[i] && num1<vec[i+1]) && (num2>vec[i] && num2<vec[i+1])){
                 return true;                                                // True if num1 and num2 are between same consecutive elements
@@ -197,7 +200,7 @@ bool is_nums_in_same_interval(const std::vector<long>& vec, int num1, int num2) 
 //------------------------------------------------------------------------------------------------------
 // This function will first sort the vector passed and then remove any duplicates if there is any
 //------------------------------------------------------------------------------------------------------
-void sortNremoveDuplicates_inVector(std::vector<long>& vec) {
+void sortNremoveDuplicates_inVector(std::vector<long>& vec){
     std::sort(vec.begin(), vec.end());                                      // Sort the vector
 
     auto last = std::unique(vec.begin(), vec.end());                        // Remove adjacent duplicates
@@ -210,20 +213,20 @@ void sortNremoveDuplicates_inVector(std::vector<long>& vec) {
 //------------------------------------------------------------------------------------------------------
 // This function will remove a non-empty directory and it's contents
 //------------------------------------------------------------------------------------------------------
-void remove_directory(const std::string& path) {
+void remove_directory(const std::string& path){
     DIR* dir = opendir(path.c_str());
-    if (dir == nullptr) {                                                   // Directory does not exist or cannot be opened
+    if (dir == nullptr){                                                    // Directory does not exist or cannot be opened
         return;
     }
 
     struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
+    while ((entry = readdir(dir)) != nullptr){
         std::string filename = entry->d_name;
-        if (filename != "." && filename != "..") {
+        if (filename != "." && filename != ".."){
             std::string filepath = path + "/" + filename;
-            if (entry->d_type == DT_DIR) {
+            if (entry->d_type == DT_DIR){
                 remove_directory(filepath);                                 // Recursively remove subdirectories
-            } else {
+            } else{
                 remove(filepath.c_str());                                   // Remove regular files
             }
         }
@@ -255,7 +258,7 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
     snprintf(command, sizeof(command), "df -k \"%s\" | awk 'NR==2 {print $4}'", directory);             // Command string; get the disk space available for the directory (in Kilobytes)
 
     FILE* pipe = popen(command, "r");                                                                   // Execute the command
-    if (!pipe || !total_fasta_size) {                                                                   // If we can't execute the command or if the fasta size was zero, then exit
+    if (!pipe || !total_fasta_size){                                                                    // If we can't execute the command or if the fasta size was zero, then exit
         std::cerr<<"\n WARNING: Unable to determine the disk space available for storage \n"
                  <<" Estimated storage space needed to run the program with the given parameters is "<<formattedStorageNeeded<<"\n"
                  <<" If the available space is less than the estimate, the program might stop with an error at the end of the run\n";
@@ -269,7 +272,7 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
 
     pclose(pipe);                                                                                       // Close pipe 
 
-    if (result.empty()) {                                                                               // If failed to determine the disk space, return
+    if (result.empty()){                                                                                // If failed to determine the disk space, return
         std::cerr<<"\n WARNING: Unable to determine the disk space available for storage \n"
                  <<" Estimated storage space needed to run the program with the given parameters is "<<formattedStorageNeeded<<"\n"
                  <<" If the available space is less than the estimate, the program might stop with an error at the end of the run\n";
@@ -294,10 +297,10 @@ void checkStorageSize(NGSParameters& parameter, NGSsdd& SDDdata, long one_fasta_
 // Function takes the number of bytes as input and returns a string representing the formatted size.
 // The function calculates the appropriate suffix (e.g., B, KB, MB, etc.) based on powers of 1024
 //------------------------------------------------------------------------------------------------------
-std::string formatBytes(long long bytes) {
+std::string formatBytes(long long bytes){
     const int base = 1024;
     const char* suffixes[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
-    if (bytes == 0) {
+    if (bytes == 0){
         return "0 B";                                                                                   // Handle special case of 0 bytes
     }
     int index = static_cast<int>(std::log(bytes) / std::log(base));
@@ -308,10 +311,81 @@ std::string formatBytes(long long bytes) {
     std::string formattedValue = oss.str();
 
     formattedValue.erase(formattedValue.find_last_not_of('0') + 1, std::string::npos);                  // Trim trailing zeros
-    if (formattedValue.back() == '.') {
+    if (formattedValue.back() == '.'){
         formattedValue.pop_back();                                                                      // Remove decimal point if no fractional part
     }
 
     return formattedValue + " " + suffixes[index];
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// Function takes string data and return compressed string instead. This function is needed to create a 
+// gzip text file
+//------------------------------------------------------------------------------------------------------
+void compressStringData(const std::string& input, std::string& output){
+    const size_t CHUNK_SIZE = 16384;                                                                    // Chunk size for compressing data
+    z_stream strm;                                                                                      // Temporary compression stream object to hold the state information for the compression    
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+
+    if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY) != Z_OK){// Initiate compression stream with necessary flags
+        throw std::runtime_error("Failed to initialize zlib");
+    }
+
+    strm.next_in = (Bytef*)input.data();                                                                // Setting the input data
+    strm.avail_in = input.size();                                                                       // Setting the size of the input data
+
+    do{                                                                                                 // This is the loop that performs the compression
+        char out[CHUNK_SIZE];
+        strm.next_out = reinterpret_cast<Bytef*>(out);
+        strm.avail_out = CHUNK_SIZE;
+
+        if (deflate(&strm, Z_FINISH) == Z_STREAM_ERROR){
+            deflateEnd(&strm);
+            throw std::runtime_error("Failed to compress string");
+        }
+
+        size_t compressedBytes = CHUNK_SIZE - strm.avail_out;
+        if (compressedBytes > 0) {
+            output.append(out, compressedBytes);
+        }
+    } while (strm.avail_out == 0);                                                                      // The loop continues until strm.avail_out becomes non-zero, indicating that there is still space in the output buffer
+
+    deflateEnd(&strm);                                                                                  // Release resources associated with the compression stream
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// Function takes the arguments: beta value, minimum and maximum bounds and the mode value of a beta distribution
+// you want to create and generate a vector containing normalized probaility densities of each value between the bounds.
+// The returned weight vector will have probabilities for each integer value between minimum and maximum bounds in order.
+// eg: if the bound is [50,150], then generated vector will have 100 elements corresponding to the probabilities
+// for 51,52,23...150 according to the beta distribution described by the beta value and mode.
+//------------------------------------------------------------------------------------------------------
+std::vector<double> beta_distribution_proabalities(double beta, int minSize, int maxSize, double realMode){
+    int steps = maxSize - minSize;                                                                      // Determine how many integer steps are between max and min values
+    double stepSize = 1.0/steps;                                                                        // The step size for these many steps in the interval [0,1] is range/steps
+    double betaMode = (realMode-minSize)*stepSize;                                                      // Determine where the mode should be in the range [0,1] if actual mode in range [min,max] is known
+    double alpha =  ((-betaMode*beta)+(2*betaMode)-1)/(betaMode-1);                                     // For a beta distribution Mode = (a-1)/(a+b-2). This equation can be used to find alpha (a)
+    
+    std::vector<double> weights(steps);                                                                 // Temporary vector to store the normalized probabilities for each integer value corresponding to each step
+    double multiplier = tgamma(alpha+beta)/(tgamma(alpha)*tgamma(beta));                                // This is the multiplier constant in the beta probability density function
+    double totalWeight{0};                                                                              // Temporary value to hold the sum of of probability densities to use for normalization later
+    for(int i=0; i<steps; i++){
+        double x = i*stepSize;                                                                          // Determine the value each x values (steps) in range [0,1] with the given step size
+        weights[i] = multiplier * pow(x,(alpha-1)) * pow((1-x),(beta-1));                               // Beta PDF:  f(x) = Const * x^(q-1) * (1-x)^(b-1)
+        totalWeight += weights[i];                                                                      // Get the total
+    }
+    
+    for (double& weight : weights){                                                                     // Normalize the Beta PDF to have the integral under the curve to be 1
+        weight/=totalWeight;                                        
+    }
+    return (weights);                                                                                   // Return the normalized probability vector 
 }
 //------------------------------------------------------------------------------------------------------

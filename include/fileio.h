@@ -23,7 +23,7 @@ char* generateInputFileMemoryMap(const std::string&, size_t&);                  
 void resizeMemoryMappedFile(char*&, int&, size_t&, size_t);                                             // function to re-map an existing memory mapped file when data exceeds its allotted size 
 int getNextChromSeq(std::ifstream&, std::string&, std::string&);                                        // function to read the reference sequence file, one chromosome sequence at a time
 int getNextChromSeq_MM(const char*, size_t, size_t&, std::string&, std::string&);                       // function to read the reference sequence memory-map, one chromosome sequence at a time
-void writeBatchToFile(std::vector<std::string>&, std::ofstream&);                                       // function to write to files in batch from a buffer 
+void writeBatchToFile(std::vector<std::string>&, std::ofstream&, bool);                                 // function to write to files in batch from a buffer 
 void writeBatchToMMFile(std::vector<std::string>&, char*&, char*&, size_t&, std::string filePath="NA"); // function to write to memory mapped Files in batch from a buffer. filePath is an optional argument 
 int readFastaTemplate(std::ifstream&, std::string&, std::string&, std::string&, std::string&);          // function to read the fasta file template file, one chrom seq and chrom ID at a time 
 int readFastaMemoryMap(const char*, size_t, size_t&, std::string&, std::string&, std::string&, std::string&);

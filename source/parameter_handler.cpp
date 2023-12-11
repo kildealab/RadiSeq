@@ -119,14 +119,17 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "do_paired_end_sequencing"){
         set_paired_end_sequencing(paramName, paramValue);
     }
-    else if (*paramName == "mean_DNA_fragment_length"){
-        set_mean_DNA_fragment_length(paramValue);
+    else if (*paramName == "min_DNA_fragment_length"){
+        set_min_DNA_fragment_length(paramValue);
     }
-    else if (*paramName == "std_dev_DNA_fragment_length"){
-        set_std_dev_DNA_fragment_length(paramValue);
+    else if (*paramName == "max_DNA_fragment_length"){
+        set_max_DNA_fragment_length(paramValue);
     }
-    else if (*paramName == "maximum_errors_in_reads"){
-        set_max_errors_in_read(paramValue);
+    else if (*paramName == "mode_DNA_fragment_length"){
+        set_mode_DNA_fragment_length(paramValue);
+    }
+    else if (*paramName == "beta_of_beta_distribution"){
+        set_beta_of_beta_distribution(paramName, paramValue);
     }
     else if (*paramName == "read1_insertion_error_rate"){
         set_insertion_error_rate_read1(paramValue);
@@ -271,14 +274,22 @@ void NGSParameters::set_paired_end_sequencing(std::string* paramName, std::strin
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"True\" -----\n";
     }
 }
-void NGSParameters::set_mean_DNA_fragment_length(std::string* paramValue){
-    mean_DNA_fragment_length = std::stoi(*paramValue);
+void NGSParameters::set_min_DNA_fragment_length(std::string* paramValue){
+    min_DNA_fragment_length = std::stoi(*paramValue);
 }
-void NGSParameters::set_std_dev_DNA_fragment_length(std::string* paramValue){
-    std_dev_DNA_fragment_length = std::stoi(*paramValue);
+void NGSParameters::set_max_DNA_fragment_length(std::string* paramValue){
+    max_DNA_fragment_length = std::stoi(*paramValue);
 }
-void NGSParameters::set_max_errors_in_read(std::string* paramValue){
-    max_read_errors = std::stoi(*paramValue);
+void NGSParameters::set_mode_DNA_fragment_length(std::string* paramValue){
+    mode_DNA_fragment_length = std::stod(*paramValue);
+}
+void NGSParameters::set_beta_of_beta_distribution(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) > 1.0){
+        beta_of_beta_distribution = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"4.5\" -----\n";
+    }
 }
 void NGSParameters::set_insertion_error_rate_read1(std::string* paramValue){
     r1_insError_rate = std::stod(*paramValue);
@@ -376,14 +387,17 @@ double NGSParameters::get_total_read_coverage(){
 bool NGSParameters::get_paired_end_sequencing(){
     return(is_paired_end_seq);
 }
-int NGSParameters::get_mean_DNA_fragment_length(){
-    return(mean_DNA_fragment_length);
+int NGSParameters::get_min_DNA_fragment_length(){
+    return(min_DNA_fragment_length);
 }
-int NGSParameters::get_std_dev_DNA_fragment_length(){
-    return(std_dev_DNA_fragment_length);
+int NGSParameters::get_max_DNA_fragment_length(){
+    return(max_DNA_fragment_length);
 }
-int NGSParameters::get_max_errors_in_read(){
-    return(max_read_errors);
+double NGSParameters::get_mode_DNA_fragment_length(){
+    return(mode_DNA_fragment_length);
+}
+double NGSParameters::get_beta_of_beta_distribution(){
+    return(beta_of_beta_distribution);
 }
 double NGSParameters::get_insertion_error_rate_read1(){
     return(r1_insError_rate);
@@ -475,12 +489,16 @@ void NGSParameters::help_parameter(std::string* paramName){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to perform paired-end sequencing \n";
     }
-    else if (*paramName == "mean_DNA_fragment_length"){
-        std::cerr<<" Specify the mean DNA fragment length in bp. This is different from the read length. \n"
-        <<" A read is read from a DNA fragment, therefore, the mean DNA fragment length must be longer than the read length\n";
+    else if (*paramName == "DNA_fragment_length"){
+        std::cerr<<" Specify the minimum and maximum lengths of DNA fragments to be generated (in bp). This is different from the read length. \n"
+        <<" Make sure the minimum and maximum values correspond to the lower and upper limit of the desired distribution respectively\n";
     }
-    else if (*paramName == "std_dev_DNA_fragment_length"){
-        std::cerr<<" Specify the standard deviation of the mean DNA fragment length in bp. \n";
+    else if (*paramName == "mode_DNA_fragment_length"){
+        std::cerr<<" Specify the mode DNA fragment size for the desired DNA fragment size distribution. \n"
+        <<" This value should be between the minimum and maximum DNA fragment sizes \n";
+    }
+    else if (*paramName == "beta_of_beta_distribution"){
+        std::cerr<<" The beta parameter for the beta distribution needs to be greater than 1 \n";
     }
     else if (*paramName == "make_summary_report"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
@@ -584,7 +602,7 @@ void NGSParameters::success_parameter(){
     
     // Check if the user specified Illumina sequencer profile is in the list of built-in sequencer profiles
     auto it = std::find(list_sequencers.begin(), list_sequencers.end(), *get_sequencer());      // Find the location of the sequencer in the list
-    if ( it == list_sequencers.end()) {
+    if ( it == list_sequencers.end()){
         std::cerr<<"\n ERROR: Illumina sequencer name provided : "<< *get_sequencer()<<" is not compatible \n";
         temp_str= "illumina_sequencer"; help_parameter(&temp_str);
         exit(EXIT_FAILURE);
@@ -602,15 +620,16 @@ void NGSParameters::success_parameter(){
         exit(EXIT_FAILURE);
     }
 
-    // If user wants to do paired-end sequencing, make sure mean DNA fragment length and std dev are also provided. Else exit with error
+    // If user wants to do paired-end sequencing, make sure the bounds of the DNA fragment length distributions are appropriate. Else exit with error
     if (get_paired_end_sequencing()){
-        if (get_mean_DNA_fragment_length()<get_read_length()){
-            std::cerr<<"\n ERROR: The mean DNA fragment length ("<<get_mean_DNA_fragment_length()<<") provided is smaller than the read length ("<<get_read_length()<<")\n";
-            temp_str= "mean_DNA_fragment_length"; help_parameter(&temp_str);
+        if (get_min_DNA_fragment_length()>get_max_DNA_fragment_length()){
+            std::cerr<<"\n ERROR: The maximum DNA fragment length ("<<get_max_DNA_fragment_length()<<" bp) provided is smaller than the minimum DNA fragment length ("<<get_min_DNA_fragment_length()<<" bp)\n";
+            temp_str= "DNA_fragment_length"; help_parameter(&temp_str);
             exit(EXIT_FAILURE);
-        }else if (!(get_std_dev_DNA_fragment_length() > 0)){
-            std::cerr<<"\n ERROR: User must provide a non-zero positive standard deviation value\n";
-            temp_str= "std_dev_DNA_fragment_length"; help_parameter(&temp_str);
+        }
+        if (get_min_DNA_fragment_length()>get_mode_DNA_fragment_length() || get_max_DNA_fragment_length()<get_mode_DNA_fragment_length()){
+            std::cerr<<"\n ERROR: The mode DNA fragment length ("<<get_max_DNA_fragment_length()<<") provided is not between the lower and upper bounds given ( ["<<get_min_DNA_fragment_length()<<","<<get_max_DNA_fragment_length()<<"] )\n";
+            temp_str= "mode_DNA_fragment_length"; help_parameter(&temp_str);
             exit(EXIT_FAILURE);
         }
     }

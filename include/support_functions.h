@@ -30,5 +30,6 @@ void checkStorageSize(NGSParameters&, NGSsdd&, long);                        // 
                                                                              // program with the given parameters and requriements
 
 std::string formatBytes(long long);                                          // Function to convert bytes into human readable format (Kb, Mb, Gb etc.)
-
+void compressStringData(const std::string&, std::string&);                   // Function to compress the string data passed
+std::vector<double> beta_distribution_proabalities(double, int, int, double);// Function to create a beta distribution probabilities according to the parameters passed
 #endif

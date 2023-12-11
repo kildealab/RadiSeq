@@ -62,7 +62,7 @@ void ART::set_read_quality_distribution(const std::string& r1_quality_filename, 
 // x can take all values from 0 to read_length. The calculated probabilities are stored as 
 // an array into the vector object: error_probability_vec that is passed.
 //--------------------------------------------------------------------------------------------
-void ART::set_read_error_probability(int read_length, double error_rate, std::vector<double>& error_probability_vec, int max_errors){
+/*void ART::set_read_error_probability(int read_length, double error_rate, std::vector<double>& error_probability_vec, int max_errors){
     error_probability_vec.clear();                                                                      // Empty the vector 
     double cdf_cutoff = 0.999999;                                                                       // Threshold value for total probability
     
@@ -82,6 +82,16 @@ void ART::set_read_error_probability(int read_length, double error_rate, std::ve
         total_probability += probability; 
         if(total_probability >= cdf_cutoff) break;                                                      // If total probability exceeded the threshold, return
     }
+}*/
+//--------------------------------------------------------------------------------------------
+
+
+
+//--------------------------------------------------------------------------------------------
+void ART::set_read_error_rates(int read_len, double ins_rate, double del_rate){
+    read_length = read_len;
+    insertion_rate = ins_rate;
+    deletion_rate = del_rate;
 }
 //--------------------------------------------------------------------------------------------
 
@@ -92,10 +102,9 @@ void ART::set_read_error_probability(int read_length, double error_rate, std::ve
 // and sets the static variables read_lenth and valid_region along with the chromSegmentSeq.
 // Returns true if the chromosome segment is big enough to make reads
 //--------------------------------------------------------------------------------------------
-bool ART::int_set(int read_len, std::string& chromSeq, int nThreads){
-    valid_region = chromSeq.size() - read_len;
+bool ART::int_set(std::string& chromSeq, int nThreads){
+    valid_region = chromSeq.size() - read_length;
     if(valid_region<1) return false;                                                                    // If read length is > chromSegmentSeq length, then do not proceed with the chromSegmentSeq
-    read_length = read_len;
     chromSegSeq = &chromSeq;
     indel_map_vec.clear();                                                                              // Clear any pre-existing data
     read_seq_vec.clear();
@@ -162,6 +171,44 @@ int ART::get_indel_map(int threadID){
     int deletion_length{0};                                                                             // Variable to hold the size of the deletion made
     
     // Processing deletions first
+    deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, read_length, threadID));                                                                        // Find size X
+    if(deletion_length>0){
+        for(int j=deletion_length; j>0;){                                                                         // Make X deletions at random in the read and make a map of the deletions made in a read
+            int deletion_position = round((read_length-1)*rng::rand_double(0,1,threadID));          // Randomly generate a deletion location in read. Values can range [0,read_length-1]
+            if(indel_map.find(deletion_position) == indel_map.end()){                               // map.find(pos) will return where in the map we have key 'pos'. Therefore, make a deletion only if the position is not already mutated
+                indel_map[deletion_position] = '-';                                                 // Indicate deletion with '-' in the indel map
+                j--;
+            }
+        }
+    }
+
+    // Processing insertions 
+    insertion_length = static_cast<int>(rng::binomial_distribution(insertion_rate, read_length, threadID));
+    while((read_length-deletion_length)<insertion_length){                                        // Ensure that there is enough unchanged position for mutation after introducing deletions. Try another length if not
+        insertion_length = static_cast<int>(rng::binomial_distribution(insertion_rate, read_length, threadID));
+    }
+    if(insertion_length>0){                             // If probability of having an insertion of size X is greater than a random probability value generated, then
+        for(int j=insertion_length; j>0;){
+            int insertion_position = round((read_length-1)*rng::rand_double(0,1,threadID));         // Randomly generate an insertion location in read in the interval [0,read_length-1].
+            if(indel_map.find(insertion_position) == indel_map.end()){                              // Add an insertion mutation if this location does not already have a mutation
+                int base = rng::rand_int(1,4,threadID);                                             // Randomly determine the nitrogen base to add to the insertion_position
+                switch(base){
+                    case 1:
+                        indel_map[insertion_position] = 'A';   break;
+                    case 2:
+                        indel_map[insertion_position] = 'C';   break;
+                    case 3:
+                        indel_map[insertion_position] = 'G';   break;
+                    case 4:
+                        indel_map[insertion_position] = 'T';  
+                }
+                j--;
+            }
+        }
+    }
+
+
+/*    // Processing deletions first
     for(int i=deletion_probability_vec.size(); i>0; i--){                                               // The size of the deletion_probability_vec is the max number of errors a read can have,if specified, else is the read length
         if(deletion_probability_vec[i-1]>=rng::rand_double(0,1,threadID)){                              // If probability of having a deletion of size X is greater than a random probability value generated, then
             deletion_length = i;                                                                        // Find size X
@@ -199,7 +246,7 @@ int ART::get_indel_map(int threadID){
             }
             break;                                                                                      // Stop processing insertions if insertions of size X is made and mapped once
         }
-    }
+    }*/
     return (insertion_length-deletion_length);
 }
 //--------------------------------------------------------------------------------------------
@@ -217,8 +264,44 @@ int ART::get_balanced_indel_map(int threadID){
     int insertion_length{0};                                                                            // Variable to hold the size of the insertion made
     int deletion_length{0};                                                                             // Variable to hold the size of the deletion made
     
+    insertion_length = static_cast<int>(rng::binomial_distribution(insertion_rate, read_length, threadID));
+    if(insertion_length>0){
+        for(int j=insertion_length; j>0;){
+            int insertion_position = round((read_length-1)*rng::rand_double(0,1,threadID));         // Randomly generate an insertion location in read in the interval [0,read_length-1].
+            if(indel_map.find(insertion_position) == indel_map.end()){                              // Add an insertion mutation if this location does not already have a mutation
+                int base = rng::rand_int(1,4,threadID);                                             // Randomly determine the nitrogen base to add to the insertion_position
+                switch(base){
+                    case 1:
+                        indel_map[insertion_position] = 'A';   break;
+                    case 2:
+                        indel_map[insertion_position] = 'C';   break;
+                    case 3:
+                        indel_map[insertion_position] = 'G';   break;
+                    case 4:
+                        indel_map[insertion_position] = 'T';  
+                }
+                j--;
+            }
+        }
+    }
 
-    // Processing insertions first
+
+    // Processing deletions and ensures the number of deletions are not more than the number of insertions
+    deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, insertion_length, threadID)); // Make sure the maximum number of deletions is <= the number of insertions
+    while((read_length-insertion_length) < deletion_length){                                                    // Ensure that there is enough unchanged position for mutation after introducing insertions. Try again if not
+        deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, insertion_length, threadID)); 
+    }                                                             
+    if(deletion_length>0){                                                
+        for(int j=deletion_length; j>0;){                                                                         // Make X deletions at random in the read and make a map of the deletions made in a read
+            int deletion_position = round((read_length-1)*rng::rand_double(0,1,threadID));          // Randomly generate a deletion location in read. End positions are invalid for deletion. Therefore floor function is used to ignore 'read_length-1'
+            if(deletion_position == 0) continue;                                                    // Similarly, position '0' is also ignored
+            if(indel_map.find(deletion_position) == indel_map.end()){                               // map.find(pos) will return where in the map we have key 'pos'. Therefore, make a deletion only if the position is not already mutated
+                indel_map[deletion_position] = '-';                                                 // Indicate deletion with '-' in the indel map
+                j--;
+            }
+        }
+    }
+/*    // Processing insertions first
     for(int i=insertion_probability_vec.size(); i>0; i--){                                              // The size of the insertion_probability_vec is the max number of errors a read can have,if specified, else is the read length
         if(insertion_probability_vec[i-1]>=rng::rand_double(0,1,threadID)){                             // If probability of having an insertion of size X is greater than a random probability value generated, then
             insertion_length = i;
@@ -259,7 +342,7 @@ int ART::get_balanced_indel_map(int threadID){
             }
             break;                                                                                      // Stop processing deletions if deletions of size X is made and mapped once
         }
-    }
+    }*/
     return (insertion_length-deletion_length);
 }
 //--------------------------------------------------------------------------------------------
@@ -370,19 +453,20 @@ void ART::add_baseCall_error(std::vector<short>& read_quality_vec, int threadID)
 // randomly generate a DNA fragment based on the mean and stdDev values user-specified. Then,
 // two reads will be generated from opposite ends of the same fragment.
 //--------------------------------------------------------------------------------------------
-void ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int mean_frag_length, int std_dev_frag_length, int threadID){
+void ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFragSize, std::vector<double>& fragment_weights, int threadID){
     const std::string& chromSegmentSeq = *read_1.get_chromSegmentSeq();                                 // Variable holding chromosome seqgment sequence
     int read_length = read_1.get_read_length();                                                         // Variable to hold the read length that we want to generate
     // Determine the fragment length to be simulated from the chromSegmentSequence. 
     long chromSegment_length = chromSegmentSeq.length();                                                // Variable to hold the length of the chromosome segment being processed                               
     long fragment_length{0};                                                                            // Variable to hold the fragment length that needs to be simulated
     while(fragment_length<=read_length){                                                                // Repeat fragmentation until a fragment > read length is obtained. 
-        if(mean_frag_length - (2*std_dev_frag_length) > chromSegment_length){                           // If chromSegment length < mean - 2*stdDev, then set fragment length to be chromSegmentSeq length
+        if(minFragSize > chromSegment_length){                                                          // If chromSegment length < minimumFragment length, then set fragment length to be chromSegmentSeq length
         fragment_length = chromSegment_length;
-        }else{                                                                                          // Else randomly sample a fragment length from the normal distribution of specific mean and std_dev user-specified
-            fragment_length = static_cast<long>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length, threadID)));
+        }else{                                                                                          // Else randomly sample a fragment length from the beta distribution weights
+            fragment_length = static_cast<long>(minFragSize+(rng::weighted_rand_int(fragment_weights, threadID)));
+            
             while (fragment_length<read_length || fragment_length>chromSegment_length){                 // Sample again and again until the generated fragment length satisfies the required conditions
-                fragment_length = static_cast<long>(round(rng::normal_distribution(mean_frag_length, std_dev_frag_length, threadID)));
+                fragment_length = static_cast<long>(minFragSize+(rng::weighted_rand_int(fragment_weights, threadID)));
             }   
         }
     }

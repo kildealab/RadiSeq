@@ -6,6 +6,7 @@
 class NGSsdd{
     int num_of_SDDs;                                                                 // Variable to hold the number of SDD files/ particles to merge
     int num_of_exposures;                                                            // Variable to hold the number of exposures in SDD. This will be the lowest value among all SDDs
+    int num_of_damagedCells_toBuild;                                                 // Variable to hold the number of damaged cells we want to build from all the exposures in the SDD file. This value will be <= num of exposures
     std::vector<std::vector<double>> actual_dose_delivered;                          // Vector that holds vectors than contain actual dose delivered in each exposure for every SDD file
     double expected_dose_gy;                                                         // Variable to hold the dose in Gy that was expected to be delivered in MC simulation
     std::vector<long> chrom_size_bp;                                                 // Vector that holds the chromosome length in bp from the MC model
@@ -37,6 +38,9 @@ public:
 
     void set_num_of_exposures(int);                                                  // function to set 'num_of_exposures'
     int get_num_of_exposures();                                                      // function to get 'num_of_exposures'
+
+    void set_num_of_damagedCells_toBuild(int);                                       // function to set 'num_of_damagedCells_toBuild'
+    int get_num_of_damagedCells_toBuild();                                           // function to get 'num_of_damagedCells_toBuild'
 
     const std::vector<std::vector<double>>* get_actual_dose_delivered();             // function to get 'actual_dose_delivered' vector
 

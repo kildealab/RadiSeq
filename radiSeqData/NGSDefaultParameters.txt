@@ -51,20 +51,20 @@ total_read_coverage                         = 30                      # Specify 
 
 do_paired_end_sequencing                    = True                    # "True" if the user wishes to perform paired-end sequencing. 
 
-mean_DNA_fragment_length                    = 0                       # Must specify the mean DNA fragment length (in bp) if paired-end sequencing. This is different from the read length.
-                                                                      # Read is obtained after reading a portion of the DNA fragment with this specified length
+min_DNA_fragment_length                     = 300                     # Minimum DNA fragment size (in bp) to be generated (in bp) if paired-end sequencing.
 
-std_dev_DNA_fragment_length                 = 0                       # Standard deviation in the mean DNA fragment length (in bp)
+max_DNA_fragment_length                     = 2000                    # Maximum DNA fragment size (in bp) to be generated (in bp) if paired-end sequencing.
 
-maximum_errors_in_reads                     = -1                      # Specify the maximum number of indel errors that you are okay to have in a read. 
-                                                                      # Default value of -1 indicates that there is no limit or threshold to the number of errors in a read
+mode_DNA_fragment_length                    = 700                     # Mode value of the DNA fragment size (in bp) distribution for paired-end sequencing.
 
-read1_insertion_error_rate                  = 0.00009                 # Specify the insertion error rate for read 1. Expects a double value between 0 and 1
+beta_of_beta_distribution                   = 4.5                     # Beta parameter value for the beta distribution that will be used to represent the fragment size distribution
+
+read1_insertion_error_rate                  = 0.00002                 # Specify the insertion error rate for read 1. Expects a double value between 0 and 1
                                                                       # Default value obtained from ART program. 
 
 read1_deletion_error_rate                   = 0.00011                 # Specify the deletion error rate for read 1. Expects a double value between 0 and 1
 
-read2_insertion_error_rate                  = 0.00015                 # Specify the insertion error rate for read 2. Expects a double value between 0 and 1
+read2_insertion_error_rate                  = 0.00009                 # Specify the insertion error rate for read 2. Expects a double value between 0 and 1
 
 read2_deletion_error_rate                   = 0.00023                 # Specify the deletion error rate for read 2. Expects a double value between 0 and 1
 

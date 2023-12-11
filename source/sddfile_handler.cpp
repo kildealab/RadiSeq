@@ -25,7 +25,7 @@ void NGSsdd::process_sddfile(NGSsdd& SDDdata, NGSParameters& parameter){
     exposureLine_vec.resize(get_num_of_SDDs());                                                         // vector to hold vectors of line numbers that corresponds to new exposures. It will store one vector for every SDD file
 
     for (int i=0; i<get_num_of_SDDs(); i++){
-        exposure_count_vector.push_back(countExposuresSDD(&sdd_paths[i], exposureLine_vec[i]));        // count exposure in each SDD one by one and also store the line numbers of each new exposure
+        exposure_count_vector.push_back(countExposuresSDD(&sdd_paths[i], exposureLine_vec[i]));         // count exposure in each SDD one by one and also store the line numbers of each new exposure
     }
     set_num_of_exposures(*std::min_element(exposure_count_vector.begin(), exposure_count_vector.end()));// find the least (common) number of exposures in all SDD(s) to merge 
     // If there are unequal number of exposure data entries (runs) in SDDs that there is to combine, print warning
@@ -33,6 +33,11 @@ void NGSsdd::process_sddfile(NGSsdd& SDDdata, NGSParameters& parameter){
         std::cerr<<"\n WARNING: The number of exposures in multiple SDD files you have provided to merge damages are not the same.\n"
         <<" This simulator will only merge exposures that are present in all SDD files and ignore the rest of the data.\n"
         <<" ---- Found "<<get_num_of_exposures()<<" exposure data to merge from SDDs ----- \n";
+    }
+    if(parameter.get_num_of_cells_to_sequence()<get_num_of_exposures()){                                // Check if the number of cells we want to sequence is less than the number of cells we have in the SDD file
+        set_num_of_damagedCells_toBuild(parameter.get_num_of_cells_to_sequence());                      // if true, build only the required number of damaged cell genomes
+    }else{
+        set_num_of_damagedCells_toBuild(get_num_of_exposures());                                        // otherwise build all the damaged cell genomes in the SDD file
     }
     if(parameter.get_adjust_damages_with_actual_dose()){                                                // if adjust damages with actual dose flag is ON, read actual dose values
         // function returns a pointer to a vector holding actual dose file paths. Therefore, de-reference the pointer to get the actual vector object
@@ -43,7 +48,7 @@ void NGSsdd::process_sddfile(NGSsdd& SDDdata, NGSParameters& parameter){
     }
     readSDDfileHeader(&sdd_paths[0], SDDdata);                                                          // header will be read only for the first SDD file, assuming all headers are same
     lines_read_sdd.resize(get_num_of_SDDs());                                                           // one value each for every SDD 
-    for (size_t i = 0; i < lines_read_sdd.size(); i++) {                                                // initiating the vector with empty values
+    for (size_t i = 0; i < lines_read_sdd.size(); i++){                                                 // initiating the vector with empty values
         lines_read_sdd[i] = std::streampos(std::streamoff(0));                                          // streamoff(0) is setting the position to be at the beginning of the stream
     }
 
@@ -61,6 +66,9 @@ void NGSsdd::set_num_of_SDDs(int sddValue){
 void NGSsdd::set_num_of_exposures(int sddValue){
     num_of_exposures = sddValue;
 }
+void NGSsdd::set_num_of_damagedCells_toBuild(int sddValue){
+    num_of_damagedCells_toBuild = sddValue;
+}
 void NGSsdd::set_expected_dose_gy(std::string* sddField){
     std::vector<std::string> temp_vec;                                                                  // Temporary vector to hold stringToVec function return
     stringToVec(',', sddField, temp_vec);                                                               // Converts comma-seperated sddField to temp_vec
@@ -70,7 +78,7 @@ void NGSsdd::set_chrom_size_bp(std::string* sddField){
     std::vector<std::string> temp_vec;
     stringToVec(',', sddField, temp_vec);
     for(int i=0; i<std::stoi(temp_vec[1]); i++){                                                        // Iterate through each chromosome sizes. temp_vec[1] is the number of chroms
-        if (temp_vec[i+2].back() == ';') {                                                              // Check if the ';' character is at the end. Last entry might have it.
+        if (temp_vec[i+2].back() == ';'){                                                               // Check if the ';' character is at the end. Last entry might have it.
             temp_vec[i+2].erase(temp_vec[i+2].size() - 1);                                              // Remove the ';' character
         }
         chrom_size_bp.push_back(std::stold(temp_vec[i+2])*1e6);                                         // Convert chrom size from Mbp to bp before storing
@@ -183,6 +191,9 @@ int NGSsdd::get_num_of_SDDs(){
 int NGSsdd::get_num_of_exposures(){
     return(num_of_exposures);
 } 
+int NGSsdd::get_num_of_damagedCells_toBuild(){
+    return(num_of_damagedCells_toBuild);
+}
 const std::vector<std::vector<double>>* NGSsdd::get_actual_dose_delivered(){
     return(&actual_dose_delivered);
 }
@@ -377,7 +388,7 @@ void NGSsdd::adjust_damages_data(double rel_dose, int exposure_index, int sdd_in
     std::vector<long>::iterator site1 = backbone1_break_loc.begin();
 	std::vector<long>::iterator site2 = backbone2_break_loc.begin();
     // Proceed until have completely processed SSBs in either backbone
-    while (site1 != backbone1_break_loc.end() && site2 != backbone2_break_loc.end()) {
+    while (site1 != backbone1_break_loc.end() && site2 != backbone2_break_loc.end()){
         int siteDiff = *site1 - *site2;                                                                 // separation in number of bp
 		bool isDSB{0};                                                                                  // initiating with zero
         
