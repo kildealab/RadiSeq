@@ -55,6 +55,7 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         std::string chromSegSeq;                                                                        // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
         std::string chromSegSeq_ID;                                                                     // Temporary variable to hold IDs of each hromosome segment sequence
         int end_flag;                                                                                   // Flag to indicate the end of memory map sequences
+        bool goodSegment{true};                                                                         // Flag to indicate if the chromSegSeq is good for further processing
 
         const int batchSize{2000};                                                                      // Define a batch size for writing reads to the output file. These much data will be stored in cache before writing it on the file
         
@@ -64,7 +65,7 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         // Single-end sequencing
         if(!parameter.get_paired_end_sequencing()){                                                     // If user asked for single-end (not paired-end) sequencing
             std::vector<std::vector<std::string>> batch_buffer(nThreads_User);                          // Create a buffer vector with vectors for each thread to store read data
-            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag)                            // Start the parallel region. Threads will be generated and they will get the specific shared variables
+            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,goodSegment)                // Start the parallel region. Threads will be generated and they will get the specific shared variables
             {
                 int local_end_flag = 1;                                                                 // A flag for each thread to check if the end of memory map is reached. 
                 while(local_end_flag){
@@ -80,30 +81,37 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                         #pragma omp single                                                              // This section needs to be done by only one thread
                         {
                             int nThreads_omp = omp_get_num_threads();                                   // Get the actual number of threads available for OpenMP
-                            read1.int_set(chromSegSeq, nThreads_omp);
-                        }
-                        #pragma omp barrier                                                             // Make sure all threads reach this point, before proceeding with the rest
-                        #pragma omp for                                                                 // This is where we are splitting the iterations of the for loop to each thread
-                        for(int j=0; j<num_reads_per_segment; j++){
-                            int threadID = omp_get_thread_num();                                        // Get the ID of each thread being tracked
-                            read1.generate_read_with_indel(threadID);                                   // Make a read with random indel errors
-                            std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
-                            read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
-                            read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
-                            
-                            std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                   // Remove the '>' symbol from the chrom ID
-                            std::string read_data = "@"+chromID+":read"+std::to_string(j)+"\n";         // @readID
-                            read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +
-                            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores; insert only as many quality values as with the length of sequence
-                                read_data += static_cast<char>(read1_quality_score_vec[k]+33);
+                            goodSegment = true;                                                         // Reset flag for each segment
+                            goodSegment = goodSegment && read1.int_set(chromSegSeq, nThreads_omp);      // Boolean AND operation ensures that TRUE only when both conditons are TRUE
+                            if(*parameter.get_coverage_distribution() == "mda"){                        // Prepare the read distribution if the selected coverage distributon is MDA
+                                goodSegment = goodSegment && ART::MDA_distribution_maker(num_reads_per_segment, coverage_per_cell);
                             }
-                            read_data += "\n";
-                            
-                            batch_buffer[threadID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread                    
-                            if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the thread's batch buffer is full, and write it to the file if needed.
-                                #pragma omp critical(section1)
-                                {
-                                writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
+                            goodSegment = goodSegment && ART::get_N_mask_and_GCbias(parameter.get_N_threshold_in_reads());// Mask regions in the chromSegSeq where the number of N's exceed the threshold to avoid making reads
+                        }
+                        #pragma omp barrier                                                                 // Make sure all threads reach this point, before proceeding with the rest
+                        if(goodSegment){                                                                    // Proceed only if the chromoSegSeq is good
+                            #pragma omp for                                                                 // This is where we are splitting the iterations of the for loop to each thread
+                            for(int j=0; j<num_reads_per_segment; j++){
+                                int threadID = omp_get_thread_num();                                        // Get the ID of each thread being tracked
+                                read1.generate_read_with_indel(threadID);                                   // Make a read with random indel errors
+                                std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
+                                read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
+                                read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
+                                
+                                std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                   // Remove the '>' symbol from the chrom ID
+                                std::string read_data = "@"+chromID+"_read"+std::to_string(j)+"\n";         // @readID
+                                read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +
+                                for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores; insert only as many quality values as with the length of sequence
+                                    read_data += static_cast<char>(read1_quality_score_vec[k]+33);
+                                }
+                                read_data += "\n";
+                                
+                                batch_buffer[threadID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread                    
+                                if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the thread's batch buffer is full, and write it to the file if needed.
+                                    #pragma omp critical(section1)
+                                    {
+                                        writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
+                                    }
                                 }
                             }
                         }
@@ -123,11 +131,13 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
             read2.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(),parameter.get_deletion_error_rate_read2());
             //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
             //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
-                
+
+            int good_iterations{0};                                                                     // Temporary counter variable to count the number of iterations where a read was generated. Read will not be generated if some condition is not met
+    
             std::vector<std::vector<std::string>> batch_buffer_r1(nThreads_User);                       // Create a buffer for each thread for storing read 1 data.
             std::vector<std::vector<std::string>> batch_buffer_r2(nThreads_User);                       // Create a buffer for each thread for storing read 2 data.
             
-            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag)                            // Start the parallel region. Threads will be generated and they will get the specific shared variables
+            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,goodSegment,good_iterations)// Start the parallel region. Threads will be generated and they will get the specific shared variables
             {
                 int local_end_flag = 1;                                                                 // A flag for each thread to check if the end of memory map is reached. 
                 while(local_end_flag){
@@ -143,68 +153,80 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                         #pragma omp single                                                              // This section needs to be done by only one thread
                         {
                             int nThreads_omp = omp_get_num_threads();                                   // Get the actual number of threads available for OpenMP
-                            read1.int_set(chromSegSeq, nThreads_omp);
+                            goodSegment = true;                                                         // Reset flag for each segment
+                            goodSegment = goodSegment && read1.int_set(chromSegSeq, nThreads_omp);
                             read2.int_set(chromSegSeq, nThreads_omp);
+                            if(*parameter.get_coverage_distribution() == "mda"){                        // Divided the number of reads per segment by 2 coz each site generate two reads in paired-end seq
+                                goodSegment = goodSegment && ART::MDA_distribution_maker(num_reads_per_segment/2, coverage_per_cell);
+                            }
+                            goodSegment = goodSegment && ART::get_N_mask_and_GCbias(parameter.get_N_threshold_in_reads(), parameter.get_min_DNA_fragment_length()); // Mask regions in the chromSegSeq where the number of N's exceed the threshold to avoid making reads
+                            good_iterations = 0;                                                        // Reset the counter for each chrom segment
                         }
                         #pragma omp barrier                                                             // Make sure all threads reach this point, before proceeding with the rest
-                        #pragma omp for
-                        for(int j=0; j<num_reads_per_segment; j+=2){                                    // Create as many reads per segment in a loop. J is incremented by 2 since two reads are created in one loop (paired end)
-                            int threadID = omp_get_thread_num();                                        // Get the ID of each thread being tracked
-                            ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID);
-                                                                                                        // Make two paired-reads from the same DNA fragment with indel errors
-                            // Process read 1 first
-                            std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
-                            read1.get_read_quality(read1_quality_score_vec, 1,threadID);                // Get the read quality scores for the read positions for read 1
-                            read1.add_baseCall_error(read1_quality_score_vec,threadID);                 // Add base call errors to the read based on the quality scores on read 2
-                            
-                            std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                   // Remove the '>' symbol from the chrom ID
-                            std::string read1_data = "@"+chromID+":read"+std::to_string(j)+":1\n";      // @readID
-                            read1_data += (*read1.get_final_read_sequence(threadID)) + "\n+\n";         // read sequence and +
-                            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores
-                                read1_data += static_cast<char>(read1_quality_score_vec[k]+33);
-                            }
-                            read1_data += "\n";
+                        if(goodSegment){                                                                // Proceed only if the chromoSegSeq is good
+                            while(good_iterations<num_reads_per_segment){
+                                int done_loops = good_iterations;                                                      // Copy of good_iterations to use it in for loop bound. Copy is needed to avoid race condition
+                                #pragma omp for reduction(+:good_iterations)
+                                for(int j=0; j<(num_reads_per_segment-done_loops); j+=2){                              // Create as many reads per segment in a loop. J is incremented by 2 since two reads are created in one loop (paired end)
+                                    int threadID = omp_get_thread_num();                                               // Get the ID of each thread being tracked
+                                    if(ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID)){
+                                                                                                                       // Make two paired-reads from the same DNA fragment with indel errors
+                                        // Process read 1 first
+                                        std::vector<short> read1_quality_score_vec;                                    // Vector to hold the quality scores for read 1
+                                        read1.get_read_quality(read1_quality_score_vec, 1,threadID);                   // Get the read quality scores for the read positions for read 1
+                                        read1.add_baseCall_error(read1_quality_score_vec,threadID);                    // Add base call errors to the read based on the quality scores on read 2
+                                        
+                                        std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                      // Remove the '>' symbol from the chrom ID
+                                        std::string read1_data = "@"+chromID+"_read"+std::to_string(j)+"/1\n";         // @readID
+                                        read1_data += (*read1.get_final_read_sequence(threadID)) + "\n+\n";            // read sequence and +
+                                        for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){     // read quality scores
+                                            read1_data += static_cast<char>(read1_quality_score_vec[k]+33);
+                                        }
+                                        read1_data += "\n";
 
-                            // Process read 2
-                            std::vector<short> read2_quality_score_vec;                                 // Vector to hold the quality scores for read 2
-                            read2.get_read_quality(read2_quality_score_vec, 2,threadID);                // Get the read quality scores for the read positions for read 2
-                            read2.add_baseCall_error(read2_quality_score_vec,threadID);                 // Add base call errors to the read based on the quality scores on read 2
-                            
-                            std::string read2_data = "@"+chromID+":read"+std::to_string(j)+":2\n";      // @readID
-                            read2_data += (*read2.get_final_read_sequence(threadID)) + "\n+\n";         // read sequence and +
-                            for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){  // read quality scores
-                                read2_data += static_cast<char>(read2_quality_score_vec[k]+33);
-                            }
-                            read2_data += "\n";
-                            
-                            batch_buffer_r1[threadID].push_back(read1_data);                               // Add the read 1 data to the thread's buffer 1.   
-                            batch_buffer_r2[threadID].push_back(read2_data);                               // Add the read 2 data to the thread's buffer 2.                 
-                            if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                #pragma omp critical(section1)
-                                {
-                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
+                                        // Process read 2
+                                        std::vector<short> read2_quality_score_vec;                                    // Vector to hold the quality scores for read 2
+                                        read2.get_read_quality(read2_quality_score_vec, 2,threadID);                   // Get the read quality scores for the read positions for read 2
+                                        read2.add_baseCall_error(read2_quality_score_vec,threadID);                    // Add base call errors to the read based on the quality scores on read 2
+                                        
+                                        std::string read2_data = "@"+chromID+"_read"+std::to_string(j)+"/2\n";         // @readID
+                                        read2_data += (*read2.get_final_read_sequence(threadID)) + "\n+\n";            // read sequence and +
+                                        for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){     // read quality scores
+                                            read2_data += static_cast<char>(read2_quality_score_vec[k]+33);
+                                        }
+                                        read2_data += "\n";
+                                        
+                                        good_iterations += 2;
+
+                                        batch_buffer_r1[threadID].push_back(read1_data);                               // Add the read 1 data to the thread's buffer 1.   
+                                        batch_buffer_r2[threadID].push_back(read2_data);                               // Add the read 2 data to the thread's buffer 2.                 
+                                        if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
+                                            #pragma omp critical(section1)
+                                            {
+                                                writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
+                                                writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
+                                            }
+                                        }
+                                    }
                                 }
-                                #pragma omp critical(section2)
-                                {
-                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
-                                }
+                                #pragma omp barrier
                             }
                         }
                     }
                 }
             }
             for (size_t l=0;l<batch_buffer_r1.size();l++){
-                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
-                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                                    // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
             }
             fastq_R2_file.close();
         }
         fastq_R1_file.close();
 
-        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                                     // To make the report, making a vector of all the cells that were sequenced
+        report_cells_sequenced.push_back(cellGenomes_to_be_sequenced[i]);                               // To make the report, making a vector of all the cells that were sequenced
         report_fastq_output.push_back((*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i));
 
-        munmap(fastaFileMM, fastaFileSize);                                                                   // Unmap the fasta file of the current cell to avoid memory-leaks
+        munmap(fastaFileMM, fastaFileSize);                                                             // Unmap the fasta file of the current cell to avoid memory-leaks
     }  
 }
 //--------------------------------------------------------------------------------------------
@@ -228,7 +250,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
     read1.set_read_error_rates(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
     //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
     //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
-
+    
     std::string output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R1.fastq.gz";
     std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                     // ofstream object of the output fastq file for read 1
 
@@ -241,7 +263,7 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
     std::vector<std::string> cellGenomes;                                                               // A vector to hold the names of cells that are randomly selected to sequence
     std::vector<std::unordered_map<int, int>> line_frequency_map_vec;                                   // A vector of maps to hold the randoms lines and its frequencies (ie, <linenumber, frequency>) in each cell files that we want to read to generate the reads, in order of cell in cellGenome vector
     while (total_num_reads > (readPerFrag-1)){
-        int cell_index = rng::rand_int(1,cellGenomes_to_be_sequenced.size()) - 1;                       // Randomly choose a cell to generate reads. 'cell_index' can take values from 0 to cellGenomes_to_be_sequenced.size minus 1
+        int cell_index = rng::rand_int(1,static_cast<int>(cellGenomes_to_be_sequenced.size())) - 1;     // Randomly choose a cell to generate reads. 'cell_index' can take values from 0 to cellGenomes_to_be_sequenced.size minus 1
         int reads_to_generate_in_cell = rng::rand_int(0,max_num_reads_per_cell);                        // Randomly determine how many reads should be generated from this particular cell that is selected randomly
         if(max_num_reads_per_cell < readPerFrag ){                                                      // If max_num_reads_per_cell is zero, this will prevent program getting stuck
             reads_to_generate_in_cell = rng::rand_int(0,total_num_reads);
@@ -305,8 +327,9 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
             std::string chromSegSeq;                                                                    // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
             std::string chromSegSeq_ID;                                                                 // Temporary variable to hold IDs of each hromosome segment sequence
             int end_flag;                                                                               // Flag to indicate the end of memory map sequences
+            bool goodSegment{true};                                                                     // Flag to indicate if the chromSegSeq is good for further processing
 
-            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,line_inFile)                // Start the parallel region. Threads will be generated and they will get the specific shared variables
+            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,line_inFile,goodSegment)    // Start the parallel region. Threads will be generated and they will get the specific shared variables
             {
                 int line_num = line_inFile;                                                             // A counter for each thread to check which chromosome segment is being processed from the memory map
                 int local_end_flag = 1;                                                                 // A flag for each thread to check if the end of memory map is reached. 
@@ -325,33 +348,37 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                             #pragma omp single                                                          // This section needs to be done by only one thread
                             {
                                 int nThreads_omp = omp_get_num_threads();                               // Get the actual number of threads available for OpenMP
-                                read1.int_set(chromSegSeq, nThreads_omp);
+                                goodSegment = true;                                                     // Reset flag for each segment
+                                goodSegment = goodSegment && read1.int_set(chromSegSeq, nThreads_omp);  // TRUE only when both conditions are TRUE
+                                goodSegment = goodSegment && ART::get_N_mask_and_GCbias(parameter.get_N_threshold_in_reads());// Mask regions in the chromSegSeq where the number of N's exceed the threshold to avoid making reads
                             }
-                            #pragma omp barrier                                                         // Make sure all threads reach this point, before proceeding with the rest
-                            #pragma omp for reduction (+:reads_actually_generated)                      // This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
-                            for(int i=0; i<line_frequency_map[line_num]; i++){                          // line_frequency_map[line_num] gives the frequency of that line in the list, which is equal to the number of reads we want to generate from that line
-                                int threadID = omp_get_thread_num();                                    // Get the ID of each thread being tracked
-                                read1.generate_read_with_indel(threadID);                               // Make a read with random indel (insertions and deletions) errors
-                                std::vector<short> read1_quality_score_vec;                             // Vector to hold the quality scores for read 1
-                                read1.get_read_quality(read1_quality_score_vec, 1, threadID);           // Get the read quality scores for the read positions
-                                read1.add_baseCall_error(read1_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores
+                            #pragma omp barrier                                                             // Make sure all threads reach this point, before proceeding with the rest
+                            if(goodSegment){                                                                // Proceed only if the chromSegSeq is good
+                                #pragma omp for reduction (+:reads_actually_generated)                      // This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
+                                for(int i=0; i<line_frequency_map[line_num]; i++){                          // line_frequency_map[line_num] gives the frequency of that line in the list, which is equal to the number of reads we want to generate from that line
+                                    int threadID = omp_get_thread_num();                                    // Get the ID of each thread being tracked
+                                    read1.generate_read_with_indel(threadID);                               // Make a read with random indel (insertions and deletions) errors
+                                    std::vector<short> read1_quality_score_vec;                             // Vector to hold the quality scores for read 1
+                                    read1.get_read_quality(read1_quality_score_vec, 1, threadID);           // Get the read quality scores for the read positions
+                                    read1.add_baseCall_error(read1_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores
+                                    
+                                    std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
+                                    std::string chromID = chromSegSeq_ID; chromID.erase(0,1);               // Remove the '>' symbol from the chrom ID
+                                    std::string read_data = "@"+cellName+"_"+chromID+"_read"+std::to_string(reads_actually_generated)+"\n";  // @readID
+                                    read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";                                        // read sequence and +
+                                    for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                               // read quality scores
+                                        read_data +=static_cast<char>(read1_quality_score_vec[k]+33);
+                                    }
+                                    read_data +="\n";
                                 
-                                std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
-                                std::string chromID = chromSegSeq_ID; chromID.erase(0,1);               // Remove the '>' symbol from the chrom ID
-                                std::string read_data = "@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+"\n";  // @readID
-                                read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";                                        // read sequence and +
-                                for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                               // read quality scores
-                                    read_data +=static_cast<char>(read1_quality_score_vec[k]+33);
-                                }
-                                read_data +="\n";
-                            
-                                reads_actually_generated +=1;
-                                
-                                batch_buffer[threadID].push_back(read_data);                                // Add the read data to the batch buffer.                    
-                                if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                    #pragma omp critical(section1)
-                                    {
-                                    writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
+                                    reads_actually_generated +=1;
+                                    
+                                    batch_buffer[threadID].push_back(read_data);                                // Add the read data to the batch buffer.                    
+                                    if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
+                                        #pragma omp critical(section1)
+                                        {
+                                            writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
+                                        }
                                     }
                                 }
                             }
@@ -404,15 +431,16 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
 
             int line_inFile{1};                                                                         // Temporary variable to count the number of lines read from the fasta memory map
             int reads_actually_generated{0};                                                            // Temporary counter variable to count the number of reads actually generated for each cell; for the report
-            
+            int good_iterations{0};                                                                     // Temporary counter variable to count the number of iterations where a read was generated. Read will not be generated if some condition is not met
+
             std::unordered_map<int, int> line_frequency_map = line_frequency_map_vec[cell];             // Get the line frequency map of the cell being processed
             size_t entries_in_freqMap = line_frequency_map.size();                                      // Get the number of entries in the line frequency map for later use
             
             std::string chromSegSeq;                                                                    // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
             std::string chromSegSeq_ID;                                                                 // Temporary variable to hold IDs of each hromosome segment sequence
             int end_flag;                                                                               // Flag to indicate the end of memory map sequences
-                                
-            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,line_inFile)                // Start the parallel region. Threads will be generated and they will get the specific shared variables
+            bool goodSegment{true};                                                                     // Flag to indicate if the chromSegSeq is good for further processing
+            #pragma omp parallel shared(chromSegSeq,chromSegSeq_ID,end_flag,line_inFile,goodSegment,good_iterations)// Start the parallel region. Threads will be generated and they will get the specific shared variables
             {
                 int line_num = line_inFile;                                                             // A counter for each thread to check which chromosome segment is being processed from the memory map
                 int local_end_flag = 1;                                                                 // A flag for each thread to check if the end of memory map is reached. 
@@ -431,57 +459,64 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                             #pragma omp single                                                          // This section needs to be done by only one thread
                             {
                                 int nThreads_omp = omp_get_num_threads();                               // Get the actual number of threads available for OpenMP
-                                read1.int_set(chromSegSeq, nThreads_omp);
+                                goodSegment = true;                                                     // Reset flag for each segment
+                                goodSegment = goodSegment && read1.int_set(chromSegSeq, nThreads_omp);
                                 read2.int_set(chromSegSeq, nThreads_omp);
+                                goodSegment = goodSegment && ART::get_N_mask_and_GCbias(parameter.get_N_threshold_in_reads(), parameter.get_min_DNA_fragment_length());   // Mask regions in the chromSegSeq where the number of N's exceed the threshold to avoid making reads
+                                good_iterations = 0;                                                                  // Reset the counter for each chrom segment
                             }
-                            #pragma omp barrier                                                         // Make sure all threads reach this point, before proceeding with the rest
-                            #pragma omp for reduction (+:reads_actually_generated)                      // This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
-                            for(int i=0; i<line_frequency_map[line_num]; i++){                          // line_frequency_map[line_inFile] gives the frequency of that line in the list, which is equal to the number of reads we want to generate from that line
-                                int threadID = omp_get_thread_num();                                    // Get the ID of each thread being tracked
-                                ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID);
-                                                                                                        // Make two paired-reads from the same DNA fragment with indel errors
-                                // Process read 1 first
-                                std::vector<short> read1_quality_score_vec;                             // Vector to hold the quality scores for read 1
-                                read1.get_read_quality(read1_quality_score_vec, 1, threadID);           // Get the read quality scores for the read positions for read 1
-                                read1.add_baseCall_error(read1_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores on read 2
-                                
-                                std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
-                                std::string chromID = chromSegSeq_ID; chromID.erase(0,1);               // Remove the '>' symbol from the chrom ID
-                                std::string read1_data ="@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+":1\n";   // @readID
-                                read1_data +=(*read1.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
-                                for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
-                                    read1_data +=static_cast<char>(read1_quality_score_vec[k]+33);
-                                }
-                                read1_data +="\n";
-                                
-                                // Process read 2
-                                std::vector<short> read2_quality_score_vec;                             // Vector to hold the quality scores for read 2
-                                read2.get_read_quality(read2_quality_score_vec, 2, threadID);           // Get the read quality scores for the read positions for read 2
-                                read2.add_baseCall_error(read2_quality_score_vec, threadID);            // Add base call errors to the read based on the quality scores on read 2
-                                
-                                std::string read2_data ="@"+cellName+":"+chromID+":read"+std::to_string(reads_actually_generated)+":2\n";   // @readID
-                                read2_data +=(*read2.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
-                                for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
-                                    read2_data +=static_cast<char>(read2_quality_score_vec[k]+33);
-                                }
-                                read2_data +="\n";
-                                
-                                reads_actually_generated += 2;
-                            
-                                batch_buffer_r1[threadID].push_back(read1_data);                        // Add the read 1 data to the batch buffer 1.   
-                                batch_buffer_r2[threadID].push_back(read2_data);                        // Add the read 2 data to the batch buffer 2.                 
-                                if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                    #pragma omp critical(section1)
-                                    {
-                                        writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
+                            #pragma omp barrier                                                                       // Make sure all threads reach this point, before proceeding with the rest
+                            if(goodSegment){
+                                while(good_iterations<line_frequency_map[line_num]){                            
+                                    int done_loops = good_iterations;                                                 // Copy of good_iterations to use it in for loop bound. Copy is needed to avoid race conditions
+                                    #pragma omp for reduction(+:reads_actually_generated) reduction(+:good_iterations)// This is where we are splitting the iterations of the for loop to each thread with a reduction variable to specify that it is shared
+                                    for(int i=0; i<(line_frequency_map[line_num]-done_loops); i++){                   // line_frequency_map[line_inFile] gives the frequency of that line in the list, which is equal to the number of reads we want to generate from that line
+                                        int threadID = omp_get_thread_num();                                          // Get the ID of each thread being tracked
+                                        if(ART::generate_paired_reads_with_indel(read1, read2, parameter.get_min_DNA_fragment_length(), fragment_weights, threadID)){
+                                                                                                                      // Make two paired-reads from the same DNA fragment with indel errors
+                                            // Process read 1 first
+                                            std::vector<short> read1_quality_score_vec;                               // Vector to hold the quality scores for read 1
+                                            read1.get_read_quality(read1_quality_score_vec, 1, threadID);             // Get the read quality scores for the read positions for read 1
+                                            read1.add_baseCall_error(read1_quality_score_vec, threadID);              // Add base call errors to the read based on the quality scores on read 2
+                                            
+                                            std::string cellName = cellGenomes[cell]; cellName.erase(cellName.length()-3);
+                                            std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                 // Remove the '>' symbol from the chrom ID
+                                            std::string read1_data ="@"+cellName+"_"+chromID+"_read"+std::to_string(reads_actually_generated)+"/1\n";   // @readID
+                                            read1_data +=(*read1.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
+                                            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
+                                                read1_data +=static_cast<char>(read1_quality_score_vec[k]+33);
+                                            }
+                                            read1_data +="\n";
+                                            
+                                            // Process read 2
+                                            std::vector<short> read2_quality_score_vec;                               // Vector to hold the quality scores for read 2
+                                            read2.get_read_quality(read2_quality_score_vec, 2, threadID);             // Get the read quality scores for the read positions for read 2
+                                            read2.add_baseCall_error(read2_quality_score_vec, threadID);              // Add base call errors to the read based on the quality scores on read 2
+                                            
+                                            std::string read2_data ="@"+cellName+"_"+chromID+"_read"+std::to_string(reads_actually_generated)+"/2\n";   // @readID
+                                            read2_data +=(*read2.get_final_read_sequence(threadID))+"\n+\n";                                            // read sequence and +
+                                            for(size_t k=0; k<(*read2.get_final_read_sequence(threadID)).size(); k++){                                  // read quality scores
+                                                read2_data +=static_cast<char>(read2_quality_score_vec[k]+33);
+                                            }
+                                            read2_data +="\n";
+                                            
+                                            reads_actually_generated += 2;
+                                            good_iterations++;
+
+                                            batch_buffer_r1[threadID].push_back(read1_data);                          // Add the read 1 data to the batch buffer 1.   
+                                            batch_buffer_r2[threadID].push_back(read2_data);                          // Add the read 2 data to the batch buffer 2.                 
+                                            if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
+                                                #pragma omp critical(section1)
+                                                {
+                                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
+                                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
+                                                }
+                                            }
+                                        }
                                     }
-                                    #pragma omp critical(section2)
-                                    {
-                                        writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
-                                    }
+                                    #pragma omp barrier
                                 }
-                            }
-                            
+                            } 
                         }
                         #pragma omp single                                                              // Only one thread should increment the counters
                         {
@@ -507,7 +542,6 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         for (size_t l=0;l<batch_buffer_r1.size();l++){
             writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                                  // If there are unwritten data in batch buffer 1, write that too when the loop ends
             writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                                  // If there are unwritten data in batch buffer 2, write that too when the loop ends
-        
         }
 
         fastq_R2_file.close();

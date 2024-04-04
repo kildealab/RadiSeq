@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <zlib.h>
 #include <stdexcept>
+#include <cmath>
+
 
 
 //------------------------------------------------------------------------------------------------------
@@ -104,9 +106,7 @@ template<>  // template to follow if type of the vector is string
 void stringToVec(char delimiter, std::string* seperatedString, std::vector<std::string>& vec){
     std::istringstream ss(*seperatedString);
     std::string token;
-    if(!vec.empty()){                                                       // if the same vector is passed twice (not empty)
-        vec.clear();                                                        // empty the vector to hold new data 
-    }                                                                       // i.e, (overriding default with user-given values)
+    vec.clear();                                                            // empty the vector to hold new data if the same vector is passed twice (not empty)
     while (std::getline(ss, token, delimiter)){
         token.erase(0, token.find_first_not_of(" "));                       // removing leading whitespaces from token
         token.erase(token.find_last_not_of(" ")+1);                         // removing trailing whitespaces from token
@@ -117,9 +117,7 @@ template<>  // template to follow if type of the vector is double
 void stringToVec(char delimiter, std::string* seperatedString, std::vector<double>& vec){
     std::istringstream ss(*seperatedString);
     std::string token;
-    if(!vec.empty()){                                                       // if the same vector is passed twice (not empty)
-        vec.clear();                                                        // empty the vector to hold new data 
-    }                                                                       // i.e, (overriding default with user-given values)
+    vec.clear();                                                            // empty the vector to hold new data if the same vector is passed twice (not empty)
     while (std::getline(ss, token, delimiter)){
         token.erase(0, token.find_first_not_of(" "));                       // removing leading whitespaces from token
         token.erase(token.find_last_not_of(" ")+1);                         // removing trailing whitespaces from token
@@ -130,9 +128,7 @@ template<>  // template to follow if type of the vector is int
 void stringToVec(char delimiter, std::string* seperatedString, std::vector<int>& vec){
     std::istringstream ss(*seperatedString);
     std::string token;
-    if(!vec.empty()){                                                       // if the same vector is passed twice (not empty)
-        vec.clear();                                                        // empty the vector to hold new data 
-    }                                                                       // i.e, (overriding default with user-given values)
+    vec.clear();                                                            // empty the vector to hold new data if the same vector is passed twice (not empty)
     while (std::getline(ss, token, delimiter)){
         token.erase(0, token.find_first_not_of(" "));                       // removing leading whitespaces from token
         token.erase(token.find_last_not_of(" ")+1);                         // removing trailing whitespaces from token
@@ -153,7 +149,7 @@ void removeAnElement(std::vector<int>& vec){
         std::cerr<<"\n ERROR: Vector passed to remove an element is empty\n";
         return;
     }
-    int indexToRemove = rng::rand_int(0, (vec.size()-1));                   // Random index to remove. Index of a vector of size 10 goes from 0-9
+    int indexToRemove = rng::rand_int(0, (static_cast<int>(vec.size())-1)); // Random index to remove. Index of a vector of size 10 goes from 0-9
     vec.erase(vec.begin() + indexToRemove);
 }
 template<> // Template for long vector 
@@ -162,7 +158,7 @@ void removeAnElement(std::vector<long>& vec){
         std::cerr<<"\n ERROR: Vector passed to remove an element is empty\n";
         return;
     }
-    int indexToRemove = rng::rand_int(0, (vec.size()-1));
+    int indexToRemove = rng::rand_int(0, (static_cast<int>(vec.size())-1));
     vec.erase(vec.begin() + indexToRemove);
 }
 template<> // Template for string vector 
@@ -171,7 +167,7 @@ void removeAnElement(std::vector<std::string>& vec){
         std::cerr<<"\n ERROR: Vector passed to remove an element is empty\n";
         return;
     }
-    int indexToRemove = rng::rand_int(0, (vec.size()-1));
+    int indexToRemove = rng::rand_int(0, (static_cast<int>(vec.size())-1));
     vec.erase(vec.begin() + indexToRemove);
 }
 //------------------------------------------------------------------------------------------------------
@@ -371,21 +367,102 @@ void compressStringData(const std::string& input, std::string& output){
 std::vector<double> beta_distribution_proabalities(double beta, int minSize, int maxSize, double realMode){
     int steps = maxSize - minSize;                                                                      // Determine how many integer steps are between max and min values
     double stepSize = 1.0/steps;                                                                        // The step size for these many steps in the interval [0,1] is range/steps
-    double betaMode = (realMode-minSize)*stepSize;                                                      // Determine where the mode should be in the range [0,1] if actual mode in range [min,max] is known
+    double betaMode = static_cast<double>(realMode-minSize)*stepSize;                                   // Determine where the mode should be in the range [0,1] if actual mode in range [min,max] is known
     double alpha =  ((-betaMode*beta)+(2*betaMode)-1)/(betaMode-1);                                     // For a beta distribution Mode = (a-1)/(a+b-2). This equation can be used to find alpha (a)
     
-    std::vector<double> weights(steps);                                                                 // Temporary vector to store the normalized probabilities for each integer value corresponding to each step
-    double multiplier = tgamma(alpha+beta)/(tgamma(alpha)*tgamma(beta));                                // This is the multiplier constant in the beta probability density function
+    std::vector<double> weights(steps, 0.0);                                                            // Temporary vector to store the normalized probabilities for each integer value corresponding to each step
+    double multiplier = std::tgamma(alpha+beta)/(std::tgamma(alpha)*std::tgamma(beta));                 // This is the multiplier constant in the beta probability density function
     double totalWeight{0};                                                                              // Temporary value to hold the sum of of probability densities to use for normalization later
     for(int i=0; i<steps; i++){
         double x = i*stepSize;                                                                          // Determine the value each x values (steps) in range [0,1] with the given step size
-        weights[i] = multiplier * pow(x,(alpha-1)) * pow((1-x),(beta-1));                               // Beta PDF:  f(x) = Const * x^(q-1) * (1-x)^(b-1)
+        weights[i] = multiplier * std::pow(x,(alpha-1)) * std::pow((1-x),(beta-1));                     // Beta PDF:  f(x) = Const * x^(q-1) * (1-x)^(b-1)
         totalWeight += weights[i];                                                                      // Get the total
     }
     
-    for (double& weight : weights){                                                                     // Normalize the Beta PDF to have the integral under the curve to be 1
+    for(double& weight : weights){                                                                      // Normalize the Beta PDF to have the integral under the curve to be 1
         weight/=totalWeight;                                        
     }
-    return (weights);                                                                                   // Return the normalized probability vector 
+    return(weights);                                                                                    // Return the normalized probability vector 
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// This function expect a vector as an arguement that has even number of elements in it. The function
+// will calculate the average of all the elements in odd indices (every second element in the list).
+//------------------------------------------------------------------------------------------------------
+double averageOfEverySecond(const std::vector<double>& vec){
+    if(vec.size()<2){                                                                                   // If there is only one element in the vector passed, print error and return 0
+        std::cerr << "\nERROR: Vector passed to \'averageOfEverySecond\' function has only one element" << std::endl;
+        return 0.0;
+    }
+
+    double sum{0.0};                                                                                    // Temporary variable to hold the total value
+    int count = static_cast<int>(vec.size())/2;                                                         // Temporary variable to hold the count of elements
+
+    for(size_t i=1; i<vec.size(); i+=2){                                                                // Iterate over odd indices directly
+        sum += vec[i];                                                                                  // Sum of all odd indiced elements
+    }
+
+    return(sum/count);                                                                                  // Return the average
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
+// These functions are part of the GCBias class. They are used to obtain the bias in sequencing
+// according to the GC content in a chromosome segment. set_GCbias_slope and set_GCbias_peak functions
+// will set slope and peak value of the triangular function. The get_GCfraction function will find the 
+// GC fractoin in a chromosome segment seq that is passed over bins of size specified by the read_length
+// and the get_GCbias function will actually apply the point-slope formula of lines that correspond to 
+//the increasing and decreasing segments of the triangle.
+//------------------------------------------------------------------------------------------------------
+double GCBias::slope = 0.0;                                                                             // Initialization of static variables
+//double GCBias::peak = 0.0;
+int GCBias::bin_size = 0.0;
+
+void GCBias::set_GCbias_binSize(int read_size){                                                         // Function to set the bin size over which GC fraction will be determined
+    bin_size = read_size;                                                                               // Set the bin size to be equal to the read size 
+}
+void GCBias::set_GCbias_slope(double degree_of_GC_bias){                                                // Function to set the slope (m) value to the degree of GC bias user provided
+    slope = degree_of_GC_bias;
+}
+double GCBias::get_GCbias_slope(){                                                                      // Function to get the slope previously set               
+    return slope;
+}
+/* void GCBias::set_GCbias_peak(double mean_GC_content){                                                   // Function to set the peak (X1) of the triangular bias function at the mean GC content
+    peak = mean_GC_content;
+} */
+double GCBias::get_GCfraction(const std::string& chrm_seg_seq){
+    double GCfraction_bin{0};
+    size_t bin_count = chrm_seg_seq.size()/bin_size;
+    for (size_t i=0; i<bin_count; i++){
+        size_t bin_start = i * bin_size;
+        size_t bin_end = bin_start+bin_size;
+        //long bin_GC_count = std::count_if(chrm_seg_seq.begin()+bin_start, chrm_seg_seq.begin()+bin_end,[](char c){return(c == 'G' || c == 'C');});
+        long bin_GC_count{0};
+        long bin_N_count{0};
+        for (auto it = chrm_seg_seq.begin()+bin_start; it!=chrm_seg_seq.begin()+bin_end; ++it){
+            char c = *it;
+            if(c == 'G' || c == 'C'){
+                bin_GC_count++;                                                                         // Increment 'G' and 'C' count
+            }else if(c == 'N'){
+                bin_N_count++;                                                                          // Increment 'N' count
+            }
+        }
+        GCfraction_bin += (static_cast<double>(bin_GC_count)/(bin_size-bin_N_count));                   // GC fraction should be calculated with the total non-N bases counted
+    }
+    return (GCfraction_bin/bin_count);                                                                  // This is the mean GC fraction of the current chromosome segment 
+}
+double GCBias::get_GCbias(double GC_content){                                                           // Get the bias value from the traingualar bias function specified by the slope and peak
+    double bias{0};                                                                                     // Variable to hold the y value in the line equation
+    if(GC_content<=0.5){                                                                                // For x <= X1
+        bias = (slope*(GC_content-0.5)*100)+1;                                                          // y = m(x-X1) + Y1 ; point-slope equation. (X1,Y1) is the peak value. Multiplying with 100 extends x range from [0,1] to [0,100]; gives slope more sensitivity
+    }else{                                                                                              // For x > X1
+        bias = (-slope*(GC_content-0.5)*100)+1;                                                         // y = -m(x-X1) + Y1 ; Y1 = 1, which is the peak bias
+    }
+    return std::max(bias, 0.0);                                                                         // Ensure bias is non-negative
 }
 //------------------------------------------------------------------------------------------------------

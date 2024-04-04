@@ -12,7 +12,7 @@ OBJ_DIR = objects
 # CFLAGS are compiler flags.
 # -c Compile one souce code at a time and link them only after all objext files are generated
 # -Wall Enable "warning all" 
-# -O Obtimize compilation
+# -O3 Obtimize compilation to the 3rd degree (highest level)
 # -g Include debugging information
 # -std=c++1z or c++17 C++ language standard should be C++17 or above in clang or gcc respectively
 # -fopenmp Use openmp library for parallelization
@@ -21,9 +21,9 @@ OBJ_DIR = objects
 # Determine the C++17 standard flag based on the compiler
 COMPILER := $(shell $(CPP) -dM -E - < /dev/null | grep __clang__)
 ifneq ($(COMPILER),)
-    CXXFLAGS = -c -Wall -O -g -std=c++1z -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -g -std=c++1z -fopenmp -I$(INC_DIR)
 else
-    CXXFLAGS = -c -Wall -O -g -std=c++17 -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -g -std=c++17 -fopenmp -I$(INC_DIR)
 endif
 
 LDFLAGS = -fopenmp -lz

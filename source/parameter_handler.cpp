@@ -12,7 +12,7 @@ NGSParameters::NGSParameters(){
     default_parameter_file_name = "/NGSDefaultParameters.txt";
     reference_genome_file_name = "/Human_reference_genome.fa";
     list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","test"};
-    list_read_lengths = {100, 100, 125, 150, 150, 150, 5};
+    list_read_lengths = {100, 100, 125, 150, 150, 151, 5};
     list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
     list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","test_R2.txt"};
 }
@@ -116,6 +116,12 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "total_read_coverage"){
         set_total_read_coverage(paramName, paramValue);
     }
+    else if (*paramName == "coverage_distribution"){
+        set_coverage_distribution(paramName, paramValue);
+    }
+    else if (*paramName == "degree_of_GC_bias"){
+        set_degree_of_GC_bias(paramName, paramValue);
+    }
     else if (*paramName == "do_paired_end_sequencing"){
         set_paired_end_sequencing(paramName, paramValue);
     }
@@ -130,6 +136,12 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     }
     else if (*paramName == "beta_of_beta_distribution"){
         set_beta_of_beta_distribution(paramName, paramValue);
+    }
+    /* else if (*paramName == "maximum_errors_in_reads"){
+        set_max_errors_in_read(paramValue);
+    } */
+    else if (*paramName == "max_fraction_unknown_bases_in_reads"){
+        set_max_fraction_unknown_bases_in_reads(paramName, paramValue);
     }
     else if (*paramName == "read1_insertion_error_rate"){
         set_insertion_error_rate_read1(paramValue);
@@ -266,6 +278,21 @@ void NGSParameters::set_total_read_coverage(std::string* paramName, std::string*
         help_parameter(paramName);
     }
 }
+void NGSParameters::set_coverage_distribution(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "uniform"||lowercaseString(paramValue) == "mda"){
+        coverage_distribution = lowercaseString(paramValue);                                   // Gets 'uniform' or 'mda' depending on the user provided coverage distribution
+    }else{                                                                                     // If user provided unrecognized value format, print help
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"Uniform\" -----\n";
+    }
+}
+void NGSParameters::set_degree_of_GC_bias(std::string* paramName, std::string* paramValue){
+    try{
+        degree_of_GC_bias = std::abs(std::stod(*paramValue));
+    }catch(...){                                                                               // Error if provided value is not a number
+        help_parameter(paramName);
+    }
+}
 void NGSParameters::set_paired_end_sequencing(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
         is_paired_end_seq = (lowercaseString(paramValue) == "true");                           // Gets 1 if "True" or "true"; else 0
@@ -290,6 +317,20 @@ void NGSParameters::set_beta_of_beta_distribution(std::string* paramName, std::s
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"4.5\" -----\n";
     }
+}
+/* void NGSParameters::set_max_errors_in_read(std::string* paramValue){
+    max_errors_in_read = std::stoi(*paramValue);
+} */
+void NGSParameters::set_max_fraction_unknown_bases_in_reads(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        max_fraction_unknown_bases_in_reads = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"1.0\" -----\n";
+    }
+}
+void NGSParameters::set_N_threshold_in_reads(int read_length, double max_fraction_unknown_bases_in_reads){
+    N_threshold_in_reads = round(read_length*max_fraction_unknown_bases_in_reads);
 }
 void NGSParameters::set_insertion_error_rate_read1(std::string* paramValue){
     r1_insError_rate = std::stod(*paramValue);
@@ -384,6 +425,12 @@ int NGSParameters::get_num_of_cells_to_sequence(){
 double NGSParameters::get_total_read_coverage(){
     return(total_read_coverage);
 }
+const std::string* NGSParameters::get_coverage_distribution(){
+    return(&coverage_distribution);
+}
+double NGSParameters::get_degree_of_GC_bias(){
+    return(degree_of_GC_bias);
+}
 bool NGSParameters::get_paired_end_sequencing(){
     return(is_paired_end_seq);
 }
@@ -398,6 +445,15 @@ double NGSParameters::get_mode_DNA_fragment_length(){
 }
 double NGSParameters::get_beta_of_beta_distribution(){
     return(beta_of_beta_distribution);
+}
+/* int NGSParameters::get_max_errors_in_read(){
+    return(max_errors_in_read);
+} */
+double NGSParameters::get_max_fraction_unknown_bases_in_reads(){
+    return(max_fraction_unknown_bases_in_reads);
+}
+int NGSParameters::get_N_threshold_in_reads(){
+    return(N_threshold_in_reads);
 }
 double NGSParameters::get_insertion_error_rate_read1(){
     return(r1_insError_rate);
@@ -485,12 +541,22 @@ void NGSParameters::help_parameter(std::string* paramName){
         <<" If single-cell sequencing, the coverage gets distributed over the number of cells to be sequenced. \n"
         <<" i.e, if 100 cells sequenced with a coverage of 100x each cell will have 1x coverage in single-cell sequencing \n";
     }
+    else if (*paramName == "coverage_distribution"){
+        std::cerr<<" Specify whether you want to use the read coverage distribution of MDA or not for single-cell sequencing. \n"
+        <<" This parameter can take only values 'uniform' and 'mda' for two different coverage distribution types. \n"
+        <<" This option to choose the WGA distribution is only available for single-cell sequencing \n";
+    }
+    else if (*paramName == "degree_of_GC_bias"){
+        std::cerr<<" Specify the slope of the lines that make a triangular function for GC bias model. \n"
+        <<" A double value is expected. And the same slope will be used for the +ve and -ve lines. \n"
+        <<" This option to include GC bias is only available for bulk-cell sequencing \n";
+    }
     else if (*paramName == "do_paired_end_sequencing"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to perform paired-end sequencing \n";
     }
     else if (*paramName == "DNA_fragment_length"){
-        std::cerr<<" Specify the minimum and maximum lengths of DNA fragments to be generated (in bp). This is different from the read length. \n"
+        std::cerr<<" Specify the minimum and maximum lengths of DNA fragments (in bp) obtained after size selection. This is different from the read length. \n"
         <<" Make sure the minimum and maximum values correspond to the lower and upper limit of the desired distribution respectively\n";
     }
     else if (*paramName == "mode_DNA_fragment_length"){
@@ -499,6 +565,14 @@ void NGSParameters::help_parameter(std::string* paramName){
     }
     else if (*paramName == "beta_of_beta_distribution"){
         std::cerr<<" The beta parameter for the beta distribution needs to be greater than 1 \n";
+    }
+    /* else if (*paramName == "maximum_errors_in_reads"){
+        std::cerr<<" The maximum number of indel errors you can have in a read (Integer value expected)\n"
+        <<" If not specified, it will default to no restrictions on the number of indels\n";
+    } */
+    else if (*paramName == "max_fraction_unknown_bases_in_reads"){
+        std::cerr<<" Specify the allowable fraction of bases in a read to be unknown (N's). \n"
+        <<" This value should be a double in the range [0,1] \n";
     }
     else if (*paramName == "make_summary_report"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
@@ -600,6 +674,14 @@ void NGSParameters::success_parameter(){
         std::cout<<"\n Successfully read the reference genome file : "<< *get_reference_genome()<<'\n';
     }
     
+    // Check if the user provided value for the maximum errors in a read is more than the read length or if it is less than -1 (default value)
+    /* if (get_max_errors_in_read()>get_read_length() || get_max_errors_in_read()<-2){
+        std::cerr<<"\n WARNING: The value provided for the maximum number of indel errors in a read ("<<get_max_errors_in_read()<<") is invalid. Make sure the value is not exceeding the read length\n"
+        <<"  ----- Re-setting \"maximum_errors_in_reads\" to default: no limits ----- \n";
+        std::string reset_max_errors ="-1";
+        set_max_errors_in_read(&reset_max_errors);
+    } */
+    
     // Check if the user specified Illumina sequencer profile is in the list of built-in sequencer profiles
     auto it = std::find(list_sequencers.begin(), list_sequencers.end(), *get_sequencer());      // Find the location of the sequencer in the list
     if ( it == list_sequencers.end()){
@@ -611,6 +693,7 @@ void NGSParameters::success_parameter(){
         int index = std::distance(list_sequencers.begin(), it);                                 // Calculate the index of the sequencer name in the list
         set_read_length(index);                                                                 // Set the read length accordingly
         set_read_quality_profiles(index);                                                       // Set the filenames of read quality profiles accordingly
+        set_N_threshold_in_reads(get_read_length(), get_max_fraction_unknown_bases_in_reads()); // Set the threshold on the number of unknown bases in a read
     }
 
     // Check if the number of cells to sequence is > number of cells in the sample. If true, exit with error
@@ -620,14 +703,34 @@ void NGSParameters::success_parameter(){
         exit(EXIT_FAILURE);
     }
 
+    // Check if MDA read coverage is set for bulk-cell sequencing and not single-cell sequencing
+    if (*get_coverage_distribution()=="mda"){
+        if(*get_sequencing_mode()=="bulk"){
+            std::cerr<<"\n WARNING: MDA distribution is not available for bulk-cell sequencing\n"
+            <<"  ----- Re-setting \"coverage_ditribution\" to \'Uniform\' ----- \n";
+            std::string paramValue = "uniform"; std::string paramName = "coverage_distribution"; 
+            set_coverage_distribution(&paramName, &paramValue);
+        }
+    }
+
+    // Check if GC bias is set for single-cell sequencing and not bulk-cell sequencing
+    if (get_degree_of_GC_bias()!=0.0){
+        if(*get_sequencing_mode()=="single"){
+            std::cerr<<"\n WARNING: GC bias option is not available for single-cell sequencing\n"
+            <<"  ----- Re-setting \"degree of GC bias\" to \'0.0\' ----- \n";
+            std::string paramValue = "0.0"; std::string paramName = "degree_of_GC_bias"; 
+            set_degree_of_GC_bias(&paramName, &paramValue);
+        }
+    }
+
     // If user wants to do paired-end sequencing, make sure the bounds of the DNA fragment length distributions are appropriate. Else exit with error
     if (get_paired_end_sequencing()){
-        if (get_min_DNA_fragment_length()>get_max_DNA_fragment_length()){
-            std::cerr<<"\n ERROR: The maximum DNA fragment length ("<<get_max_DNA_fragment_length()<<" bp) provided is smaller than the minimum DNA fragment length ("<<get_min_DNA_fragment_length()<<" bp)\n";
+        if (get_min_DNA_fragment_length()>=get_max_DNA_fragment_length()){
+            std::cerr<<"\n ERROR: The maximum DNA fragment length ("<<get_max_DNA_fragment_length()<<" bp) provided is equal/smaller than the minimum DNA fragment length ("<<get_min_DNA_fragment_length()<<" bp)\n";
             temp_str= "DNA_fragment_length"; help_parameter(&temp_str);
             exit(EXIT_FAILURE);
         }
-        if (get_min_DNA_fragment_length()>get_mode_DNA_fragment_length() || get_max_DNA_fragment_length()<get_mode_DNA_fragment_length()){
+        if (get_min_DNA_fragment_length()>=get_mode_DNA_fragment_length() || get_max_DNA_fragment_length()<=get_mode_DNA_fragment_length()){
             std::cerr<<"\n ERROR: The mode DNA fragment length ("<<get_max_DNA_fragment_length()<<") provided is not between the lower and upper bounds given ( ["<<get_min_DNA_fragment_length()<<","<<get_max_DNA_fragment_length()<<"] )\n";
             temp_str= "mode_DNA_fragment_length"; help_parameter(&temp_str);
             exit(EXIT_FAILURE);

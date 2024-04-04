@@ -32,4 +32,20 @@ void checkStorageSize(NGSParameters&, NGSsdd&, long);                        // 
 std::string formatBytes(long long);                                          // Function to convert bytes into human readable format (Kb, Mb, Gb etc.)
 void compressStringData(const std::string&, std::string&);                   // Function to compress the string data passed
 std::vector<double> beta_distribution_proabalities(double, int, int, double);// Function to create a beta distribution probabilities according to the parameters passed
+double averageOfEverySecond(const std::vector<double>&);                     // Function to calculate the average of every second element (odd indices) of a vector
+
+class GCBias{
+    private:
+        static double slope;                                                 // Variable that holds the slope of the linear parts of the triangular function. 
+        //static double peak;                                                  // Variable to hold the X value corresponding to the peak of the triangular function for GC bias
+        static int bin_size;                                                 // Variable to hold the bin size over which GC fraction needs to be calculated
+    public:
+        static void set_GCbias_binSize(int);                                 // Function to set the bin size for the GC fraction calculation
+        static void set_GCbias_slope(double);                                // Function to set the slope of the tirangular function so that all instances uses the same slope
+        static double get_GCbias_slope();                                    // Function to return the slope of the triangular GC bias function
+        //static void set_GCbias_peak(double);                                 // Function to set the X value of the peak so that all instances of the bias function sees the same value
+        static double get_GCfraction(const std::string&);                    // Function to calculate the GC fraction in the chromosome segment that is passed
+        static double get_GCbias(double);                                    // This function will reply a Y value for any X that is passed using the traingular function equation. 
+};
+
 #endif

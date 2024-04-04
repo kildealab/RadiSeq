@@ -37,11 +37,16 @@ class NGSParameters{
     int num_of_cells_in_sample;                                                  // Total number of cells we assume to have in a sample. Cells to sequence will be randomly sampled from this sample
     int num_of_cells_to_sequence;                                                // Total number of cells to be sequenced (damaged or not) at the end of a single run of this program
     double total_read_coverage;                                                  // Total read coverage: collectively from all cells sequenced
+    std::string coverage_distribution;                                           // Read coverage distribution to be generated based on the WGA technique used
+    double degree_of_GC_bias;                                                    // Slope of the triangular function that is used for GC bias model
     bool is_paired_end_seq;                                                      // True if user wishes to have paired-end sequencing
     int min_DNA_fragment_length;                                                 // Minimum size of the DNA fragment in bp to be generated for paired-end sequencing
     int max_DNA_fragment_length;                                                 // Maximum size of the DNA fragment in bp to be generated for paired-end sequencing
     double mode_DNA_fragment_length;                                             // Mode value of the DNA fragment size distribution we want to generate
     double beta_of_beta_distribution;                                            // Beta value of the PDF that we want to use for the beta distribution that will represent the DNA fragment distribution
+    //int max_errors_in_read;                                                      // Maximum number of indel errors that can be in a read
+    double max_fraction_unknown_bases_in_reads;                                  // User-specified fraction of maximum allowed unknown bases in a read
+    int N_threshold_in_reads;                                                    // Maximum number of unknown bases (N's) allowed in a read calculated from max_fraction_unknown_bases_in_reads
     double r1_insError_rate;                                                     // Insertion error rate in read 1 
     double r1_delError_rate;                                                     // Deletion error rate in read 1 
     double r2_insError_rate;                                                     // Insertion error rate in read 2 
@@ -115,6 +120,12 @@ public:
     void set_total_read_coverage(std::string*, std::string*);                    // function to set the read coverage value
     double get_total_read_coverage();                                            // function to get the total read coverage
 
+    void set_coverage_distribution(std::string*, std::string*);                  // function to set the read coverage distribution
+    const std::string* get_coverage_distribution();                              // function to get the read coverage distribution
+    
+    void set_degree_of_GC_bias(std::string*, std::string*);                      // function to set the degree_of_GC_bias
+    double get_degree_of_GC_bias();                                              // function to get the degree_of_GC_bias
+
     void set_paired_end_sequencing(std::string*, std::string*);                  // function to set 'is_paired_end_seq'
     bool get_paired_end_sequencing();                                            // function to get 'is_paired_end_seq'
 
@@ -129,6 +140,15 @@ public:
     
     void set_beta_of_beta_distribution(std::string*, std::string*);              // function to set the beta parameter of the beta distribution for the fragment size
     double get_beta_of_beta_distribution();                                      // function to get the beta parameter of the beta distribution for the fragment size
+
+    //void set_max_errors_in_read(std::string*);                                    // function to set the maximum number of errors in a read 
+    //int get_max_errors_in_read();                                                 // function to get the maximum number of errors in a read 
+    
+    void set_max_fraction_unknown_bases_in_reads(std::string*, std::string*);    // function to set the max_fraction_unknown_bases_in_reads
+    double get_max_fraction_unknown_bases_in_reads();                            // function to get the max_fraction_unknown_bases_in_reads
+
+    void set_N_threshold_in_reads(int, double);                                  // function to set the threshold of unknown bases in a read based on read length and max_fraction_unknown_bases_in_reads
+    int get_N_threshold_in_reads();                                              // function to get the threshold of unknown bases in a read
 
     void set_insertion_error_rate_read1(std::string*);                           // function to set the insertion error rate in read 1 
     double get_insertion_error_rate_read1();                                     // function to get the insertion error rate in read 1 

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <random>
 #include <vector>
+#include <type_traits>
 
 
 namespace rng{
@@ -43,9 +44,11 @@ namespace rng{
 
     // Function to generate a random integer number in given range, inclusive of the bounds
     // Third optional argument can be used to switch to thread-local RNG engine if needed
-    inline int rand_int(int lowerBound, int upperBound, int threadID = 0){                       // threadID gets a default value of 0 (for master thread)
-        std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
-        std::uniform_int_distribution<int> dist(lowerBound, upperBound);
+    // Template is used to switch between int, long, short etc. types
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    inline T rand_int(T lowerBound, T upperBound, int threadID = 0){                            // threadID gets a default value of 0 (for master thread)
+        std::mt19937& generator = local_mt[threadID];                                           // Switch to the generator engine instance accordingly based on threadID
+        std::uniform_int_distribution<T> dist(lowerBound, upperBound);
         return dist(generator);
     }
 
@@ -61,23 +64,23 @@ namespace rng{
     // each with a success probability of p. It returns the complement of the cumulative distribution function (CDF), 
     // which represents the probability of observing a value greater than or equal to k.
     // Fourth optional argument can be used to switch to thread-local RNG engine if needed
-    /*inline double binomial_cdf(size_t k, double p, size_t n, int threadID = 0){
+    /* inline double binomial_cdf(size_t k, double p, size_t n, int threadID = 0){
         std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
         std::binomial_distribution<size_t> dist(n, p);
         size_t successes = 0;
 
-        for (size_t i = 0; i < n; ++i){
-            if (dist(generator) >= k) successes++;
+        for (size_t i = 0; i < n; ++i){                                                          // Perform n independent trials
+            if (dist(generator) >= k) successes++;                                               // Find how many were successes
         }
 
-        double probability = 1.0 - static_cast<double>(successes) / static_cast<double>(n);
+        double probability = 1.0 - static_cast<double>(successes+1) / static_cast<double>(n);    // Probability of observing at most k successes (1 - probability of observing at least k+1 successes)
         return probability;
-    }*/
+    } */
 
     inline size_t binomial_distribution(double p, size_t n, int threadID = 0){
         std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
         std::binomial_distribution<size_t> dist(n, p);
-        return dist(generator);
+        return dist(generator);                                                                  // Returns number of successes in n number of trials with a success rate p
     }
     // Function to generate a double value randomly in a gaussian (normal) distribution specified with mean and stdDev
     // Third optional argument can be used to switch to thread-local RNG engine if needed

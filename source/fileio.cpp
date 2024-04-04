@@ -436,7 +436,7 @@ int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position,
 // written to the outputFile. This function writes the buffer to the file and clears the buffer for new data
 //------------------------------------------------------------------------------------------------------------------------
 void writeBatchToFile(std::vector<std::string>& batch_buffer, std::ofstream& outputFile, bool compressed=false){
-    if (compressed){                                          // Check if the passed file has .gz extension. If it has, then we need  to compressed the data before storing
+    if (compressed){                                                                                      // Check if the passed file has .gz extension. If it has, then we need  to compressed the data before storing
         std::ostringstream originalData;                                                                  // Temporary object to hold the string data
         for (const std::string& line : batch_buffer){                                                     // Parsing through the batch_buffer
             if (!line.empty()){                                                                           // Skip empty lines if any 
@@ -691,6 +691,7 @@ int readFastaMemoryMap(const char* genomeTemplate_data, size_t templateSize, siz
 // score to be considered.
 //------------------------------------------------------------------------------------------------------------------------
 void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std::map<unsigned int, unsigned short>>& quality_distribution_vec){
+    quality_distribution_vec.clear();                                                                     // Clear any previously stored values
     char quality_identifier;                                                                              // Variable to hold the quality identifier character
     int read_pos;                                                                                         // Variable to store the read position for which the score is accociated
     
@@ -812,7 +813,8 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
 
     report_file<<" The genome length of the Monte Carlo cell model                      : "<<SDDdata.get_sdd_genome_length()<<" bp\n"
                <<" Name of the reference genome file used                               : "<<*parameter.get_reference_genome()<<"\n"
-               <<" The length of the reference genome                                   : "<<report_ref_seq_length<<" bp\n\n"
+               <<" The length of the reference genome                                   : "<<report_ref_seq_length<<" bp\n"
+               <<" Average GC content of the reference genome                           : "<<report_GC_content*100<<"%\n\n"
                <<" ------ Sequencing information -------\n"
                <<" Name of the Illumina sequencer used for NGS simulation               : "<<*parameter.get_sequencer()<<"\n";
     if(*parameter.get_sequencing_mode() == "single"){
@@ -833,14 +835,22 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     report_file<<" Total number of cells in the sample                                  : "<<parameter.get_num_of_cells_in_sample()<<"\n"
                <<" Number of cells randomly sampled from the sample pool for sequencing : "<<parameter.get_num_of_cells_to_sequence()<<"\n"
                <<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n"
-               <<" Total number reads generated in the NGS simulation (expected)        : "<<total_reads<<"\n";
+               <<" Maximum number of acceptable unknown bases (N's) in a read           : "<<parameter.get_N_threshold_in_reads()<<" ("<<(parameter.get_max_fraction_unknown_bases_in_reads()*100)<<"%)\n";
+    if(GCBias::get_GCbias_slope()!= 0.0){
+        report_file<<" Is the simulation GC biased                                          : Yes \n"
+                   <<" Degree of GC bias simulated                                          : "<<GCBias::get_GCbias_slope()<<"\n";
+    }else report_file<<" Is the simulation GC biased                                          : No \n";
+    report_file<<" Total number reads generated in the NGS simulation (expected)        : "<<total_reads<<"\n";
+    long reads_actually_generated = std::accumulate(report_readsGenerated_perCell.begin(),report_readsGenerated_perCell.end(),0);
     if(*parameter.get_sequencing_mode() == "bulk"){
-        report_file<<" The number of reads actually generated                               : "<<std::accumulate(report_readsGenerated_perCell.begin(),report_readsGenerated_perCell.end(),0)<<"\n";
+        report_file<<" The number of reads actually generated                               : "<<reads_actually_generated<<"\n";
     }
-    report_file<<" Average number of reads generated per cell                           : "<<total_reads/parameter.get_num_of_cells_to_sequence()<<"\n"
+    report_file<<" Average number of reads generated per cell (expected)                : "<<total_reads/parameter.get_num_of_cells_to_sequence()<<"\n"
                <<" Total read coverage obtained                                         : "<<parameter.get_total_read_coverage()<<"\n"
                <<" The mean read coverage per cell                                      : "<<parameter.get_total_read_coverage()/parameter.get_num_of_cells_to_sequence()<<"\n";
-    
+    if(*parameter.get_coverage_distribution() == "mda"){
+        report_file<<" The wholge-genome amplification coverage profile used                : Multiple Displacement Amplification (MDA)\n";
+    }else report_file<<" The wholge-genome amplification coverage profile used                : Uniform amplification\n";
     /*report_file<<" Maximum number of errors allowed per read                            : ";
     if(parameter.get_max_errors_in_read()<0) report_file<<"Unlimited\n";
     else report_file<<parameter.get_max_errors_in_read()<<"\n";*/
@@ -888,7 +898,7 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         for (const auto& entry : read_contribution){
             std::string cell_name = entry.first;
             size_t cell_name_size = cell_name.size();
-            double percent_read = (entry.second/static_cast<double>(total_reads))*100;
+            double percent_read = (entry.second/static_cast<double>(reads_actually_generated))*100;
             std::stringstream ss;
             ss << std::fixed << std::setprecision(2) << percent_read;
             std::string truncated_percentRead = ss.str();

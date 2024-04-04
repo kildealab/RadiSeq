@@ -6,7 +6,7 @@ merge_damages_from_multiple_particles       = False                   # "True" i
 
 number_of_particles_to_merge                = 1                       # Number of SDD files from individual primary simulations to combine
 
-primary_particles_simulated                 = electron                # Comma seperated list of names of primary particle (strings) that introduced 
+primary_particles_simulated                 = Unspecified             # Comma seperated list of names of primary particle (strings) that introduced 
                                                                       # the damages that are going to be combined into a single genome
 
 relative_dose_contributions                 = 1                       # Comma seperated list of relative dose contributions (floats) for each particle in order
@@ -46,18 +46,29 @@ number_of_cells_in_sample                   = 600                     # Total nu
 number_of_cells_to_sequence                 = 100                     # Specify the number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected
                                                                       # from the number of cells in sample. 
 
-total_read_coverage                         = 30                      # Specify the total read coverage you want to get from this sequencing. If single-cell sequencing
+total_read_coverage                         = 10                      # Specify the total read coverage you want to get from this sequencing. If single-cell sequencing
                                                                       # the read coverage will get distributed over the total number of cells seqeunced
+
+coverage_distribution                       = Uniform                 # Specify the read coverage distribution mode to be used in single-cell sequencing. The generated read coverage can 
+                                                                      # either be "Uniform" or be "MDA" to represent uniform amplification or multiple displacement amplification respectively
+
+degree_of_GC_bias                           = 0.0                     # Specify the slope of the linear portions of the triangular function used for GC bias. Expects a double value.
 
 do_paired_end_sequencing                    = True                    # "True" if the user wishes to perform paired-end sequencing. 
 
-min_DNA_fragment_length                     = 300                     # Minimum DNA fragment size (in bp) to be generated (in bp) if paired-end sequencing.
+min_DNA_fragment_length                     = 200                     # Minimum DNA fragment size (in bp) obtained after size selection if paired-end sequencing.
 
-max_DNA_fragment_length                     = 2000                    # Maximum DNA fragment size (in bp) to be generated (in bp) if paired-end sequencing.
+max_DNA_fragment_length                     = 800                     # Maximum DNA fragment size (in bp) obtained after size selection if paired-end sequencing.
 
-mode_DNA_fragment_length                    = 700                     # Mode value of the DNA fragment size (in bp) distribution for paired-end sequencing.
+mode_DNA_fragment_length                    = 400                     # Mode value of the DNA fragment size (in bp) distribution for paired-end sequencing.
 
 beta_of_beta_distribution                   = 4.5                     # Beta parameter value for the beta distribution that will be used to represent the fragment size distribution
+
+#maximum_errors_in_reads                     = -1                      # Specify the maximum number of indel errors that you are okay to have in a read. 
+                                                                      # Default value of -1 indicates that there is no limit or threshold to the number of errors in a read
+
+max_fraction_unknown_bases_in_reads         = 1.0                     # Specify what fraction of the bases in a read can be unknown ('N'). Reads with more than this threshold will be ignored.
+                                                                      # Expect a double value in range 0 to 1. 
 
 read1_insertion_error_rate                  = 0.00002                 # Specify the insertion error rate for read 1. Expects a double value between 0 and 1
                                                                       # Default value obtained from ART program. 

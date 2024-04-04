@@ -1,0 +1,5 @@
+.DS_Store
+.vscode/
+radiSeqData/Human_reference_genome.fa
+objects/
+radiSeq
