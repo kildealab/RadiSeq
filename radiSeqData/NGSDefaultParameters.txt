@@ -37,16 +37,22 @@ output_directory_path                       = ./output                # Path to 
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
                                                                       # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
 
+custom_read1_quality_profile_path           = ""                      # Must specify the path to the quality profile file for read 1 if custom sequencer is chosen
+
+custom_read2_quality_profile_path           = ""                      # Must specify the path to the quality profile file for read 2 if custom sequencer is chosen and paired-end sequencing is needed
+
 single_or_bulk_sequencing                   = Single                  # Specify if single-cell or bulk-cell sequencing to be done. It can either be set to 
                                                                       # 'single' or 'bulk'
 
-number_of_cells_in_sample                   = 600                     # Total number of cells you assume to have in your sample. This is different from the number of cells to sequence.
+number_of_cells_in_sample                   = 10                      # Total number of cells you assume to have in your sample. This is different from the number of cells to sequence.
                                                                       # If X is the number of cells you want to sequence, then that many cells will be randomly sampled from the sample
 
-number_of_cells_to_sequence                 = 100                     # Specify the number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected
+number_of_cells_to_sequence                 = 5                       # Specify the number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected
                                                                       # from the number of cells in sample. 
 
-total_read_coverage                         = 10                      # Specify the total read coverage you want to get from this sequencing. If single-cell sequencing
+read_length                                 = 0                       # Specify the read length to be generated. 0 will default to the maximum allowable read length
+
+total_read_coverage                         = 0.01                    # Specify the total read coverage you want to get from this sequencing. If single-cell sequencing
                                                                       # the read coverage will get distributed over the total number of cells seqeunced
 
 coverage_distribution                       = Uniform                 # Specify the read coverage distribution mode to be used in single-cell sequencing. The generated read coverage can 

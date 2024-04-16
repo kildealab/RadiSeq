@@ -95,6 +95,16 @@ void uppercaseString(std::string& str){
 
 
 //------------------------------------------------------------------------------------------------------
+// This function will compare two strings passed in a case-insensitive manner
+//------------------------------------------------------------------------------------------------------
+bool compareStrings(const std::string* str1, const std::string* str2){
+    return lowercaseString(const_cast<std::string*>(str1)) == lowercaseString(const_cast<std::string*>(str2));
+}
+//------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------
 // This function can be used to convert any string that has dilimiter seperated tokens into a vector
 // eg: "This,is,an,example" is a seperatedString with 4 tokens delimited with ','. When passed to this
 // function, we get a vector ["This","is","an","example"]

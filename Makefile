@@ -35,7 +35,7 @@ SRC = $(wildcard $(SRC_DIR)/*.cpp)
 # Take all source files from SRC_DIR
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
 # For every source file, generate an object file in OBJ_DIR
-EXECUTABLE = radiSeq
+EXECUTABLE = RadiSeq
 # Specifies the name of the executable generated
 
 # Create the 'objects' directory if it doesn't exist

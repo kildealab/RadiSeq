@@ -30,8 +30,10 @@ class NGSParameters{
     int read_length;                                                             // Automatically set the read length based on the user provided sequencer name.
     std::vector<int> list_read_lengths;                                          // The list of read lengths of all the built-in sequencers in order of their names
     std::string r1_quality_profile;                                              // File name of the read 1 quality profile of the sequencer user-selected 
+    std::string path_to_custom_r1_quality_profile;                               // This variable will hold user provided (custom) read 1 quality profile file path
     std::vector<std::string> list_r1_quality_profiles;                           // The list of file names of read 1 quality profiles of all the built-in sequencers in order of their names
     std::string r2_quality_profile;                                              // File name of the read 2 quality profile of the sequencer user-selected 
+    std::string path_to_custom_r2_quality_profile;                               // This variable will hold user provided (custom) read 2 quality profile file path
     std::vector<std::string> list_r2_quality_profiles;                           // The list of file names of read 2 quality profiles of all the built-in sequencers in order of their names
     std::string sequencing_mode;                                                 // This value sets if user wants single-cell or bulk-cell sequencing
     int num_of_cells_in_sample;                                                  // Total number of cells we assume to have in a sample. Cells to sequence will be randomly sampled from this sample
@@ -101,12 +103,20 @@ public:
     void set_sequencer(std::string*);                                            // function to set the name of the illumina sequencer
     const std::string* get_sequencer();                                          // function to get the sequencer name
 
-    void set_read_length(int);                                                   // function to automatically set the read length 
+    void set_read_length(std::string*);                                          // function to set the read length 
+    void set_read_length(int);                                                   // overloading the function to take an int argument
     int get_read_length();                                                       // function to get the read length 
 
-    void set_read_quality_profiles(int);
+    void set_read_quality_profiles(int);                                         // function to set the bult-in read quality profile according to the sequencer
     const std::string* get_r1_quality_profile();
     const std::string* get_r2_quality_profile();
+
+    void set_custom_r1_quality_profile_path(std::string*);                       // function to set the 'path_to_custom_r1_quality_profile'
+    const std::string* get_custom_r1_quality_profile_path();                     // function to get the 'path_to_custom_r2_quality_profile'
+    void set_custom_r2_quality_profile_path(std::string*);                       // function to set the 'path_to_custom_r1_quality_profile'
+    const std::string* get_custom_r2_quality_profile_path();                     // function to get the 'path_to_custom_r2_quality_profile'
+
+    void set_custom_read_quality_profiles();                                     // function to set the user-provided read quality profile for custom sequencer
 
     void set_sequencing_mode(std::string*, std::string*);                        // function to set the sequencing mode: single-cell or bulk-cell
     const std::string* get_sequencing_mode();                                    // function to get the sequencing mode

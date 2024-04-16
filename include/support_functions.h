@@ -15,6 +15,7 @@ void ascii_art();                                                            // 
 void checkArgument(int, char**);                                             // Function to check the main() function arguments
 std::string lowercaseString(std::string*);                                   // Function to convert any string to lowercase
 void uppercaseString(std::string&);                                          // Function will convert any string referenced to uppercases 
+bool compareStrings(const std::string*, const std::string*);                 // Function will compare any two strings passed to check if they are same case-insensitively
 
 // Using template specialization to make the funcition work differently depending on the type of the vector passed as an argument
 template<typename T>                                                         

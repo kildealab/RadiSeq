@@ -11,7 +11,7 @@
 NGSParameters::NGSParameters(){
     default_parameter_file_name = "/NGSDefaultParameters.txt";
     reference_genome_file_name = "/Human_reference_genome.fa";
-    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","test"};
+    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","Test","Custom"};
     list_read_lengths = {100, 100, 125, 150, 150, 151, 5};
     list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
     list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","test_R2.txt"};
@@ -104,6 +104,12 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "illumina_sequencer"){
         set_sequencer(paramValue);
     }
+    else if (*paramName == "custom_read1_quality_profile_path"){
+        set_custom_r1_quality_profile_path(paramValue);
+    }
+    else if (*paramName == "custom_read2_quality_profile_path"){
+        set_custom_r2_quality_profile_path(paramValue);
+    }
     else if (*paramName == "single_or_bulk_sequencing"){
         set_sequencing_mode(paramName, paramValue);
     }
@@ -112,6 +118,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     }
     else if (*paramName == "number_of_cells_to_sequence"){
         set_num_of_cells_to_sequence(paramName, paramValue);
+    }
+    else if (*paramName == "read_length"){
+        set_read_length(paramValue);
     }
     else if (*paramName == "total_read_coverage"){
         set_total_read_coverage(paramName, paramValue);
@@ -237,8 +246,15 @@ void NGSParameters::set_output_directory(std::string* paramValue){
 void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
 }
-void NGSParameters::set_read_length(int sequencer_index){                                     // This parameter is automatically set based on the user provided sequencer
-    read_length = list_read_lengths[sequencer_index];
+void NGSParameters::set_read_length(std::string* paramValue){                                 // This parameter is automatically set based on the user provided sequencer
+    if(std::stoi(*paramValue) > 0){                                                           // set this parameter only if user specified a non-zero value. Else default
+        read_length = atoi(paramValue->c_str());                                              // Converting the parameterValue to an int
+    }else{
+        read_length = 0;                                                                      // Set to default
+    }
+}
+void NGSParameters::set_read_length(int paramValue){
+    read_length = paramValue;
 }
 void NGSParameters::set_read_quality_profiles(int sequencer_index){
     r1_quality_profile = dataFolderPath+"/"+list_r1_quality_profiles[sequencer_index];
@@ -246,6 +262,26 @@ void NGSParameters::set_read_quality_profiles(int sequencer_index){
     if(!checkFileExists(&r1_quality_profile)){
         std::cerr<<"\n ERROR: Invalid RADISEQ_DATA_DIR or Missing files\n"
                  <<" The read quality files cannot be found at "<<dataFolderPath<<"\n";
+        exit(EXIT_FAILURE);
+    }
+}
+void NGSParameters::set_custom_r1_quality_profile_path(std::string* paramValue){
+    path_to_custom_r1_quality_profile = *paramValue;
+}
+void NGSParameters::set_custom_r2_quality_profile_path(std::string* paramValue){
+    path_to_custom_r2_quality_profile = *paramValue;
+}
+void NGSParameters::set_custom_read_quality_profiles(){
+    r1_quality_profile = path_to_custom_r1_quality_profile;
+    r2_quality_profile = path_to_custom_r2_quality_profile;
+    if(!checkFileExists(&r1_quality_profile)){
+        std::cerr<<"\n ERROR: Invalid file path or Missing files\n"
+                 <<" The read quality file cannot be found at "<<path_to_custom_r1_quality_profile<<"\n";
+        exit(EXIT_FAILURE);
+    }
+    if(!r2_quality_profile.empty() && !checkFileExists(&r2_quality_profile)){
+        std::cerr<<"\n ERROR: Invalid file path or Missing files\n"
+                 <<" The read quality file cannot be found at "<<path_to_custom_r2_quality_profile<<"\n";
         exit(EXIT_FAILURE);
     }
 }
@@ -413,6 +449,12 @@ const std::string* NGSParameters::get_r1_quality_profile(){
 const std::string* NGSParameters::get_r2_quality_profile(){
     return(&r2_quality_profile);
 }
+const std::string* NGSParameters::get_custom_r1_quality_profile_path(){
+    return(&path_to_custom_r1_quality_profile);
+}
+const std::string* NGSParameters::get_custom_r2_quality_profile_path(){
+    return(&path_to_custom_r2_quality_profile);
+}
 const std::string* NGSParameters::get_sequencing_mode(){
     return(&sequencing_mode);
 }
@@ -521,7 +563,15 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "illumina_sequencer"){
         std::cerr<<" Specify the name of the Illumina sequencer to be used for sequencing. \n"
         <<" The name of the sequencer has to match one of the buil-in sequencer profiles. \n"
-        <<" Built-in sequencers: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000\n";
+        <<" Built-in sequencers: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX, NovaSeq6000 and Custom\n";
+    }
+    else if (*paramName == "custom_r1_quality_profile"){
+        std::cerr<<" Specify the path to the file containing read 1 quality profile. \n"
+        <<" This is a required parameter when the custom sequencer is chosen. \n";
+    }
+    else if (*paramName == "custom_r2_quality_profile"){
+        std::cerr<<" Specify the path to the file containing read 2 quality profile. \n"
+        <<" When paired-end sequencing is needed with a custom sequencer, both read 1 and read 2 quality profiles MUST also be specified. \n";
     }
     else if (*paramName == "single_or_bulk_sequencing"){
         std::cerr<<" Specify whether you want to perform single-cell or bulk-cell whole-genome sequencing. \n"
@@ -683,18 +733,41 @@ void NGSParameters::success_parameter(){
     } */
     
     // Check if the user specified Illumina sequencer profile is in the list of built-in sequencer profiles
-    auto it = std::find(list_sequencers.begin(), list_sequencers.end(), *get_sequencer());      // Find the location of the sequencer in the list
+    auto it = std::find_if(list_sequencers.begin(),list_sequencers.end(), [this](const std::string& s){return compareStrings(&s, get_sequencer());});
+    //auto it = std::find(list_sequencers.begin(), list_sequencers.end(), *get_sequencer());      // Find the location of the sequencer in the list
+    std::vector<int>::size_type index;
     if ( it == list_sequencers.end()){
         std::cerr<<"\n ERROR: Illumina sequencer name provided : "<< *get_sequencer()<<" is not compatible \n";
-        temp_str= "illumina_sequencer"; help_parameter(&temp_str);
+        temp_str = "illumina_sequencer"; help_parameter(&temp_str);
         exit(EXIT_FAILURE);
     }else{
         std::cout<<"\n Successfully set the Illumina sequencer : "<< *get_sequencer()<<'\n';
-        int index = std::distance(list_sequencers.begin(), it);                                 // Calculate the index of the sequencer name in the list
-        set_read_length(index);                                                                 // Set the read length accordingly
-        set_read_quality_profiles(index);                                                       // Set the filenames of read quality profiles accordingly
-        set_N_threshold_in_reads(get_read_length(), get_max_fraction_unknown_bases_in_reads()); // Set the threshold on the number of unknown bases in a read
+        index = std::distance(list_sequencers.begin(), it);                                     // Calculate the index of the sequencer name in the list
     }
+
+    // Check if the user provided read length is appropriate
+    if (index < list_read_lengths.size()){                                                      // If a built-in sequencer is chosen
+        if (get_read_length() == 0 || get_read_length() > list_read_lengths[index]){
+            std::cerr<<"\n WARNING: The maximum allowable read length is "<<list_read_lengths[index]<<" bp and the value provided is inappropirate \n"
+            <<" Therefore, the maximum length "<<list_read_lengths[index]<<" will be used (default) in this run\n";
+            set_read_length(list_read_lengths[index]);
+        }
+        set_read_quality_profiles(index);                                                       // Set the filenames of read quality profiles accordingly
+    }else{                                                                                      // If the custom sequencer is selected
+        std::string empty_path = "\"\"";                                                        // Temporary string to hold empty path, which is the default value
+        if(get_paired_end_sequencing() && *get_custom_r2_quality_profile_path()== empty_path){  // If paired-end sequencing is needed, read 2 quality profile must also be provided 
+            std::cerr<<"\n ERROR: The path to the read 2 quality profile MUST be provided with the custom sequencer \n";
+            temp_str = "custom_r2_quality_profile"; help_parameter(&temp_str);
+            exit(EXIT_FAILURE);
+        }
+        if(*get_custom_r1_quality_profile_path() == empty_path){                                // User must provide the read 1 quality profile for the custom sequencer
+            std::cerr<<"\n ERROR: The path to the read 1 quality profile MUST be provided with the custom sequencer \n";
+            temp_str = "custom_r1_quality_profile"; help_parameter(&temp_str);
+            exit(EXIT_FAILURE);
+        }
+        set_custom_read_quality_profiles();
+    }
+    set_N_threshold_in_reads(get_read_length(), get_max_fraction_unknown_bases_in_reads());     // Set the threshold on the number of unknown bases in a read
 
     // Check if the number of cells to sequence is > number of cells in the sample. If true, exit with error
     if (get_num_of_cells_to_sequence() > get_num_of_cells_in_sample()){
