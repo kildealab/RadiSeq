@@ -61,16 +61,16 @@ Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation
 6. Set up the environment variable 'RADISEQ_DATA_DIR'
    * `export RADISEQ_DATA_DIR=path/to/RadiSeq/radiSeqData`<br>
    You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.<br>
-**Note**: Replace 'path/to/RadiSeq' in step 5 and 6 with the actual full path to the directory RadiSeq_Simulator in your system
+**Note**: Replace 'path/to/RadiSeq' in step 5 and 6 with the actual full path to the directory RadiSeq in your system
 
 ### Running a test
-Run the test sequencing to check if the RadiSeq_Simulator is working fine. You can run the test using the command:<br> 
+Run the test sequencing to check if the RadiSeq is working fine. You can run the test using the command:<br> 
 * `cd ./example_test`
 * `../RadiSeq ./TestParameters.txt`
 
 A successful test run will generate FASTQ output files and a run summary file in a folder called 'output' inside the example_test directory.
 
-**Note**: User can create their own [input parameter files](#input-parameters) to run specific simulations 
+**Note**: This test example is using made-up data for the sole purpose of testing if the installation was successful. We advise against using it for any simulation observation. User can create their own [input parameter files](#input-parameters) to run specific simulations 
 
 ## Input parameters
 
@@ -84,7 +84,7 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | merge_damages_from_multiple_particles | Flag to indicate if the user wishes to define a single genome by combining damages from multiple SDD files | 'True' or 'False' |
 | number_of_particles_to_merge | Number of SDD files from individual primary simulations to combine | Number (integer) |
 | primary_particles_simulated | Names of primary particles that introduced the damages that are going to be combined into a single genome | Comma-separated list of names  (strings) |
-| relative_dose_contributions | Relative dose contributions of each primary particle in order of the SDD files | Comma-separated list of numbers between 0 and 1 (float(s)) |
+| relative_dose_contributions | Relative dose contributions of each primary particle in order of the SDD files | Comma-separated list of numbers between 0 and 1 (double(s)) |
 | adjust_damages_with_actual_dose | Flag to indicate if the user wishes to scale the number of damages with the actual dose delivered and it is different from the expected dose | 'True' or 'False' |
 | actual_dose_delivered_data | Complete path to the file containing the actual dose delivered in each run. One file is expected for each SDD file specified | Comma-separated list of paths (string) |
 | reference_genome_FASTAfile | Complete path to the reference genome file | path to file (sting) |
