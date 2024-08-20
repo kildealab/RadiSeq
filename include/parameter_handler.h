@@ -13,12 +13,12 @@ class NGSParameters{
     // Following variable objects hold respective parameter value(s)
     unsigned int random_seed;                                                    // RNG seed value. If user provides, fixed value will be stored, else random
     int number_of_threads;                                                       // Number of threads that user requested. Default is 1
-    bool is_merge_damages;                                                       // Assigns 1 if parameter value is "True" or "true". Else 0. If damages from different SDD to be merged
+    bool is_merge_damages{false};                                                // Assigns 1 if parameter value is "True" or "true". Else 0. If damages from different SDD to be merged
     int num_particles_to_merge;                                                  // Intiger value indicating the number of particle-simulations to merge
     std::vector<std::string> names_of_particles_to_merge;                        // Vector to hold the list of particles for which 'is_merge_damages' applicable
     std::vector<double> relative_dose_contributions;                             // Vector to hold the relative dose contribution from each particle
     std::vector<std::string> sddfile_path;                                       // Vector to hold the paths to SDD files from different particles to construct a genome
-    bool is_adjust_dose;                                                         // If damages needs to be adjusted with actual dose delivered
+    bool is_adjust_dose{false};                                                  // If damages needs to be adjusted with actual dose delivered
     std::vector<std::string> actual_dosefile_path;                               // Vector to hold the paths to files containing actual dose deposited in each run by each particle
     std::string reference_genome_file_name;                                      // Variable holding reference genome fasta file name
     std::string reference_genome_file;                                           // Variable holding reference genome fasta file path
@@ -41,20 +41,25 @@ class NGSParameters{
     double total_read_coverage;                                                  // Total read coverage: collectively from all cells sequenced
     std::string coverage_distribution;                                           // Read coverage distribution to be generated based on the WGA technique used
     double degree_of_GC_bias;                                                    // Slope of the triangular function that is used for GC bias model
-    bool is_paired_end_seq;                                                      // True if user wishes to have paired-end sequencing
+    int GC_binSize;                                                              // Bin size to be used for GC bias calculations
+    bool is_paired_end_seq{false};                                               // True if user wishes to have paired-end sequencing
+    std::string fragment_size_distribution_path;                                 // Path to the file storing the DNA fragment size distribution data
+    bool is_fragment_size_distribution{false};                                   // Flag to indicate if the file with fragment size distribution was provided or not
     int min_DNA_fragment_length;                                                 // Minimum size of the DNA fragment in bp to be generated for paired-end sequencing
     int max_DNA_fragment_length;                                                 // Maximum size of the DNA fragment in bp to be generated for paired-end sequencing
     double mode_DNA_fragment_length;                                             // Mode value of the DNA fragment size distribution we want to generate
     double beta_of_beta_distribution;                                            // Beta value of the PDF that we want to use for the beta distribution that will represent the DNA fragment distribution
-    //int max_errors_in_read;                                                      // Maximum number of indel errors that can be in a read
+    int max_errors_in_read;                                                      // Maximum number of indel errors that can be in a read
     double max_fraction_unknown_bases_in_reads;                                  // User-specified fraction of maximum allowed unknown bases in a read
     int N_threshold_in_reads;                                                    // Maximum number of unknown bases (N's) allowed in a read calculated from max_fraction_unknown_bases_in_reads
+    double fraction_nonFR_read_pairs;                                            // User-specified fraction of non-inward oriented (RF, FF, RR) read pairs in pair-end sequencing
+    double read_artifacts_rate;                                                  // Rate of read artifacts formation for read 1 and 2 combined
     double r1_insError_rate;                                                     // Insertion error rate in read 1 
     double r1_delError_rate;                                                     // Deletion error rate in read 1 
     double r2_insError_rate;                                                     // Insertion error rate in read 2 
     double r2_delError_rate;                                                     // Deletion error rate in read 2 
     std::string fastq_filename_prefix;                                           // String to hold the user-specified fastq output filename prefix
-    bool is_summary_report;                                                      // True if user wishes to generate a summary report at the end of the run
+    bool is_summary_report{false};                                               // True if user wishes to generate a summary report at the end of the run
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -136,8 +141,16 @@ public:
     void set_degree_of_GC_bias(std::string*, std::string*);                      // function to set the degree_of_GC_bias
     double get_degree_of_GC_bias();                                              // function to get the degree_of_GC_bias
 
+    void set_GC_binSize(std::string*);                    
+    int get_GC_binSize();
+
     void set_paired_end_sequencing(std::string*, std::string*);                  // function to set 'is_paired_end_seq'
     bool get_paired_end_sequencing();                                            // function to get 'is_paired_end_seq'
+
+    void set_fragment_size_distribution_path(std::string*, std::string*);        // function to set 'fragment_size_distribution_path'
+    const std::string* get_fragment_size_distribution_path();                    // function to get 'fragment_size_distribution_path'
+    void set_is_fragment_distribution_from_file();                               // function to set 'is_fragment_size_distribution'
+    bool get_is_fragment_distribution_from_file();                               // function to return 'is_fragment_size_distribution'
 
     void set_min_DNA_fragment_length(std::string*);                              // function to set the minimum DNA fragment length. Different from read length
     int get_min_DNA_fragment_length();                                           // function to get the minimum DNA fragment length
@@ -151,14 +164,20 @@ public:
     void set_beta_of_beta_distribution(std::string*, std::string*);              // function to set the beta parameter of the beta distribution for the fragment size
     double get_beta_of_beta_distribution();                                      // function to get the beta parameter of the beta distribution for the fragment size
 
-    //void set_max_errors_in_read(std::string*);                                    // function to set the maximum number of errors in a read 
-    //int get_max_errors_in_read();                                                 // function to get the maximum number of errors in a read 
+    void set_max_errors_in_read(std::string*);                                    // function to set the maximum number of errors in a read 
+    int get_max_errors_in_read();                                                 // function to get the maximum number of errors in a read 
     
     void set_max_fraction_unknown_bases_in_reads(std::string*, std::string*);    // function to set the max_fraction_unknown_bases_in_reads
     double get_max_fraction_unknown_bases_in_reads();                            // function to get the max_fraction_unknown_bases_in_reads
 
     void set_N_threshold_in_reads(int, double);                                  // function to set the threshold of unknown bases in a read based on read length and max_fraction_unknown_bases_in_reads
     int get_N_threshold_in_reads();                                              // function to get the threshold of unknown bases in a read
+
+    void set_fraction_nonFR_read_pairs(std::string*, std::string*);              // function to set fraction_nonFR_read_pairs
+    double get_fraction_nonFR_read_pairs();                                      // function to get fraction_nonFR_read_pairs
+
+    void set_read_artifacts_rate(std::string*, std::string*);
+    double get_read_artifacts_rate();
 
     void set_insertion_error_rate_read1(std::string*);                           // function to set the insertion error rate in read 1 
     double get_insertion_error_rate_read1();                                     // function to get the insertion error rate in read 1 

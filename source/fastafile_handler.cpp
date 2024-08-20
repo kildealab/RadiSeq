@@ -4,6 +4,7 @@
 
 #include <fstream>
 #include <sys/mman.h>
+#include <omp.h>
 
 
 //--------------------------------------------------------------------------------------------
@@ -124,7 +125,7 @@
 // repectively for two copies. Function also returns the total length of the reference sequence
 // in bp. Function will also populate a memory map of the file for easy handling.
 //--------------------------------------------------------------------------------------------
-long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<double>& ref_chrm_weights, double* average_GC_content, int read_size){
+long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<double>& ref_chrm_weights, double* average_GC_content, int GC_binSize){
     char* position_in_MM = templateFileMapping;                                                           // Pointer to the current position in the MM as we write. Starts with the pointer to the beginning
     if (position_in_MM == nullptr){return 0;}                                                             // Return if the template file memory map is not valid
     
@@ -148,7 +149,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
         case 0:                                                                                           // If cell is haploid (chromosome mapping type 0)
             while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
                 uppercaseString(chromSeq);                                                                // Change lowercase -> Uppercase
-                double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, read_size);   // Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated of read-sized bins
+                double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, GC_binSize);   // Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated for bins of given size
                 chrmCount++;
                 if(nChrms>2){                                                                             // Write according to the mapping 1 pattern
                     batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a\n"+chromSeq+"\n");
@@ -179,7 +180,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
         case 1:                                                                                           // If the cell is diploid with chromosome mapping type 1 (1,1,2,2,....22,22,X,Y)
             while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
                 uppercaseString(chromSeq);                                                                // Change lowercase -> Uppercase
-                double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, read_size);   // Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated of read-sized bins
+                double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, GC_binSize);   // Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated of read-sized bins
                 chrmCount++;
                 if(nChrms>2){                                                                             // Until all autosomes are done, 
                     for(int i=0; i<2; i++){                                                               // Write according to the mapping 1 pattern
@@ -215,7 +216,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
                 chrmCount = 0; 
                 while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
                     uppercaseString(chromSeq);                                                            // Change lowercase -> Uppercase
-                    double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, read_size);// Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated of read-sized bins
+                    double GC_fraction = getReverseComplementarySeq(chromSeq, revComp_chromSeq, GC_binSize);// Generate the reverse complementary sequence of the chrom sequence and also get the average GC fraction calculated of read-sized bins
                     chrmCount++;
                     if(chrmCount<int(TotalChrms/2)){                                                      // Write the autosomes once in the for loop
                         batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
@@ -261,17 +262,21 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
     ref_chrm_weights.resize(chrm_length_weight.size());                                                   // Reshape the ref_chrm_weights vector to the required size in advance
     std::fill(ref_chrm_weights.begin(), ref_chrm_weights.end(), 0.0);                                     // Fill all the positions of the vector with zeros
     double total_chrm_weight{0.0};                                                                        // A temporary variable to hold the total weight from each chrm weight for normalization 
-    for (size_t i = 1; i<chrm_length_weight.size(); i += 2){                                              // Skip the elements corresponding the chromosome IDs
-        double length_weight = chrm_length_weight[i]/static_cast<double>(seqLength * 2);                  // Divide each chromosome length with the total genome length from both strands combined to get the weights
-        double GC_fraction_weight = GCBias::get_GCbias(chrm_GC_fraction[i]);                              // Get the GC bias from the triangular function according to the GC fraction
-        ref_chrm_weights[i] = (length_weight*GC_fraction_weight);                                         // Populate the non-ID positions
-        total_chrm_weight += length_weight*GC_fraction_weight;                                            // Sum up all the individual chrm weights for normalization
-    }
+    #pragma omp parallel
+    {
+        #pragma omp for reduction (+:total_chrm_weight)
+        for (size_t i = 1; i<chrm_length_weight.size(); i += 2){                                          // Skip the elements corresponding the chromosome IDs
+            double length_weight = chrm_length_weight[i]/static_cast<double>(seqLength * 2);              // Divide each chromosome length with the total genome length from both strands combined to get the weights
+            double GC_fraction_weight = GCBias::get_GCbias(chrm_GC_fraction[i]);                          // Get the GC bias from the triangular function according to the GC fraction
+            ref_chrm_weights[i] = (length_weight*GC_fraction_weight);                                     // Populate the non-ID positions
+            total_chrm_weight += (length_weight*GC_fraction_weight);                                      // Sum up all the individual chrm weights for normalization
+        }
 
-    for (size_t i =1; i<ref_chrm_weights.size(); i += 2){                                                 // Skip the elements corresponding to the chromosome IDs
-        ref_chrm_weights[i] = ref_chrm_weights[i]/total_chrm_weight;                                      // Divide each chromosome length with the total weight to normalize the vector
+        #pragma omp for
+        for (size_t i =1; i<ref_chrm_weights.size(); i += 2){                                             // Skip the elements corresponding to the chromosome IDs
+            ref_chrm_weights[i] = ref_chrm_weights[i]/total_chrm_weight;                                  // Divide each chromosome length with the total weight to normalize the vector
+        }
     }
-
     return seqLength;
 }
 //--------------------------------------------------------------------------------------------
@@ -282,15 +287,16 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
 // This function will make a reverse complementary sequence for the chromSeq referenced. The
 // generated sequence will be in the direction 3'-5' if the original was 5'-3'. This new sequence
 // will be stored in the reference string object called revComp_chromSeq. It will also count
-// the number of G and C bases in the chromSeq passed and will return the mean GC fraction.
+// the number of G and C bases in the chromSeq passed and will return the mean GC fraction if 
+// the third optional argument is specified. 
 //--------------------------------------------------------------------------------------------
-double getReverseComplementarySeq(const std::string& chromSeq, std::string& revComp_chromSeq, int read_size){
+double getReverseComplementarySeq(const std::string& chromSeq, std::string& revComp_chromSeq, int GC_binSize){
     revComp_chromSeq.clear();                                                                             // Clear the string if there is previous seq
     revComp_chromSeq.resize(chromSeq.size());                                                             // Resize as with the forward sequence
     double GCfractions_allBins{0};                                                                        // Temporary variable to hold the sum of GC fractions in each read-sized bins
-    long bin_counter{0};                                                                                  // Counter variable to count the number of read-sized bins in the chromSeq passed
-    int GC_counter{0};                                                                                    // Counter variable to count the number of G, C in the each read-sized bin
-    int N_counter{0};                                                                                     // Counter variable to count the number of Ns in each read-sized bin, to remove it from the bin size when calculating GC fraction
+    long bin_counter{0};                                                                                  // Counter variable to count the number of bins with GC_binSize in the chromSeq passed
+    int GC_counter{0};                                                                                    // Counter variable to count the number of G, C in the each bin with GC_binSize
+    int N_counter{0};                                                                                     // Counter variable to count the number of Ns in each GC_binSize bin, to remove it from the bin size when calculating GC fraction
 
 /*     std::ofstream outFile("GC_fractions.txt");
     if (!outFile.is_open()) {
@@ -315,11 +321,26 @@ double getReverseComplementarySeq(const std::string& chromSeq, std::string& revC
                 revComp_chromSeq[k]='N';
         }
 
-        if(read_size!=0 && (i+1)%read_size==0){                                                           // If read_size is provided and i+1 index is a multiple fo read_size
-            GCfractions_allBins += (static_cast<double>(GC_counter)/(read_size-N_counter));               // Add the GC fraction of the bin to the total. N count must be removed from read size for GC fraction calculation 
- //           outFile <<(static_cast<double>(GC_counter)/read_size)<< '\t' <<GCBias::get_GCbias((static_cast<double>(GC_counter)/read_size))<< std::endl;
+        if(GC_binSize != 0 && (i+1)%GC_binSize==0){                                                       // If i+1 index is a multiple of the GC_binSize. Bin size is zero by defualt. Skip the caculation if zero. 
+            if (GC_binSize == N_counter){                                                                 // If all the elements in the bin are N's then GC fraction is zero
+                GCfractions_allBins = 0.0;
+            }else{
+                GCfractions_allBins += (static_cast<double>(GC_counter)/(GC_binSize-N_counter));          // Add the GC fraction of the bin to the total. N count must be removed from GC_binSize for GC fraction calculation 
+            }
+            //           outFile <<(static_cast<double>(GC_counter)/read_size)<< '\t' <<GCBias::get_GCbias((static_cast<double>(GC_counter)/read_size))<< std::endl;
             bin_counter++; GC_counter = 0; N_counter = 0;                                                 // Increment the number of bins and reset the GC counter and N counter
         }
+    }
+
+    if (GC_binSize==0) return 0.0;                                                                        // No need to do the following calculation when GC binSize is zero
+    int unprocessed_segment = chromSeq.size()-(bin_counter*GC_binSize);                                   // If there is more to the sequence after complete bins or if the sequence is smaller than one bin size
+    if (unprocessed_segment>100){                                                                         // Check if this extra sequence is atleast greater than 100 bp, (100 is randomly chosen. Read length would be ideal)
+        if (unprocessed_segment == N_counter){                                                            // If all the bases in the extra sequence are N's, GC fraction is zero
+            GCfractions_allBins = 0.0;
+        }else{
+            GCfractions_allBins += (static_cast<double>(GC_counter)/(unprocessed_segment-N_counter));     // Add the GC fraction of the extra seq to the total. N count must be removed from GC_binSize for GC fraction calculation 
+        }
+        bin_counter++;                                                                                    // Increment the number of bins for this extra sequence for further calculations
     }
     return bin_counter!=0 ? (GCfractions_allBins/bin_counter):0.0;                                        // Retrun average GC fraction if bin_counter is not 0; else return 0
 }
@@ -610,8 +631,8 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
             chrm_seg_weights.push_back(static_cast<double>(chromSeq_A.size())/total_seq_length);            
             if (GCslope != 0.0){                                                                                // Go through the calculation of GC bias only if there is a non-zero bias set
                 double chrm_GC_fraction = GCBias::get_GCfraction(chromSeq_A);                                   // Get the GC fraction in the chromosome segment 
-                chrm_GC_bias.push_back(0.0);                                                        // Corresponds to the chromosome ID
-                chrm_GC_bias.push_back(GCBias::get_GCbias(chrm_GC_fraction));                       // Stores the GC bias into a vector for each chromosome segment        
+                chrm_GC_bias.push_back(0.0);                                                                    // Corresponds to the chromosome ID
+                chrm_GC_bias.push_back(GCBias::get_GCbias(chrm_GC_fraction));                                   // Stores the GC bias into a vector for each chromosome segment        
             }
         }
         

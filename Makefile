@@ -37,13 +37,19 @@ OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
 # For every source file, generate an object file in OBJ_DIR
 EXECUTABLE = RadiSeq
 # Specifies the name of the executable generated
+EXECUTABLE2 = RadiSeqProfiler
+# Seperate executable for the profiler program
+
+# Source file for the new program
+SRC2 = radiSeqProfiler/radiSeqProfiler.cpp
+OBJ2 = $(OBJ_DIR)/radiSeqProfiler.o
 
 # Create the 'objects' directory if it doesn't exist
 $(shell mkdir -p $(OBJ_DIR))
 
-all: $(SRC) $(EXECUTABLE)
+all: $(EXECUTABLE) $(EXECUTABLE2)
 $(EXECUTABLE): $(OBJS)
-	$(CPP) $(LDFLAGS) $(OBJS) -o $@
+	$(CPP) $(OBJS) -o $@ $(LDFLAGS)
 	
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CPP) $(CXXFLAGS) $< -o $@
@@ -52,7 +58,13 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 # rest are the commands: to link the object files and create the executable
 # and to compile source files to object files respectively
 
+# Rule for building the new executable
+$(EXECUTABLE2): $(OBJ2)
+	$(CPP) $(OBJ2) -o $@ $(LDFLAGS)
+# Rule for compiling the new radiSeqProfiler.cpp file
+$(OBJ_DIR)/radiSeqProfiler.o: $(SRC2)
+	$(CPP) $(CXXFLAGS) $< -o $@
 
 # Remove all the object files and the executable
 clean:
-	rm -rf $(OBJ_DIR)/*.o $(EXECUTABLE)    
+	rm -rf $(OBJ_DIR)/*.o $(EXECUTABLE) $(EXECUTABLE2)   

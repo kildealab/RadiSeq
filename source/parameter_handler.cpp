@@ -131,8 +131,14 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "degree_of_GC_bias"){
         set_degree_of_GC_bias(paramName, paramValue);
     }
+    else if (*paramName == "bin_size_for_GC_bias_estimation"){
+        set_GC_binSize(paramValue);
+    }
     else if (*paramName == "do_paired_end_sequencing"){
         set_paired_end_sequencing(paramName, paramValue);
+    }
+    else if (*paramName == "fragment_size_distribution_path"){
+        set_fragment_size_distribution_path(paramName, paramValue);
     }
     else if (*paramName == "min_DNA_fragment_length"){
         set_min_DNA_fragment_length(paramValue);
@@ -146,11 +152,17 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "beta_of_beta_distribution"){
         set_beta_of_beta_distribution(paramName, paramValue);
     }
-    /* else if (*paramName == "maximum_errors_in_reads"){
+    else if (*paramName == "maximum_errors_in_reads"){
         set_max_errors_in_read(paramValue);
-    } */
+    }
     else if (*paramName == "max_fraction_unknown_bases_in_reads"){
         set_max_fraction_unknown_bases_in_reads(paramName, paramValue);
+    }
+    else if (*paramName == "fraction_of_other_oriented_read_pairs"){
+        set_fraction_nonFR_read_pairs(paramName, paramValue);
+    }
+    else if (*paramName == "read_artifacts_rate"){
+        set_read_artifacts_rate(paramName, paramValue);
     }
     else if (*paramName == "read1_insertion_error_rate"){
         set_insertion_error_rate_read1(paramValue);
@@ -247,13 +259,14 @@ void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
 }
 void NGSParameters::set_read_length(std::string* paramValue){                                 // This parameter is automatically set based on the user provided sequencer
-    if(std::stoi(*paramValue) > 0){                                                           // set this parameter only if user specified a non-zero value. Else default
-        read_length = atoi(paramValue->c_str());                                              // Converting the parameterValue to an int
+    int tmp = std::stoi(*paramValue);                                                         // Converting the parameterValue to an int
+    if(tmp > 0){                                                                              // set this parameter only if user specified a non-zero value. Else default
+        read_length = tmp;
     }else{
         read_length = 0;                                                                      // Set to default
     }
 }
-void NGSParameters::set_read_length(int paramValue){
+void NGSParameters::set_read_length(int paramValue){                                          // Function overload for integer argument
     read_length = paramValue;
 }
 void NGSParameters::set_read_quality_profiles(int sequencer_index){
@@ -329,6 +342,9 @@ void NGSParameters::set_degree_of_GC_bias(std::string* paramName, std::string* p
         help_parameter(paramName);
     }
 }
+void NGSParameters::set_GC_binSize(std::string* paramValue){
+    GC_binSize = std::stoi(*paramValue);
+}
 void NGSParameters::set_paired_end_sequencing(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
         is_paired_end_seq = (lowercaseString(paramValue) == "true");                           // Gets 1 if "True" or "true"; else 0
@@ -336,6 +352,12 @@ void NGSParameters::set_paired_end_sequencing(std::string* paramName, std::strin
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"True\" -----\n";
     }
+}
+void NGSParameters::set_fragment_size_distribution_path(std::string* paramName, std::string* paramValue){
+    fragment_size_distribution_path = *paramValue;
+}
+void NGSParameters::set_is_fragment_distribution_from_file(){
+    is_fragment_size_distribution = true;
 }
 void NGSParameters::set_min_DNA_fragment_length(std::string* paramValue){
     min_DNA_fragment_length = std::stoi(*paramValue);
@@ -354,9 +376,9 @@ void NGSParameters::set_beta_of_beta_distribution(std::string* paramName, std::s
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"4.5\" -----\n";
     }
 }
-/* void NGSParameters::set_max_errors_in_read(std::string* paramValue){
+void NGSParameters::set_max_errors_in_read(std::string* paramValue){
     max_errors_in_read = std::stoi(*paramValue);
-} */
+}
 void NGSParameters::set_max_fraction_unknown_bases_in_reads(std::string* paramName, std::string* paramValue){
     if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
         max_fraction_unknown_bases_in_reads = std::stod(*paramValue);
@@ -367,6 +389,22 @@ void NGSParameters::set_max_fraction_unknown_bases_in_reads(std::string* paramNa
 }
 void NGSParameters::set_N_threshold_in_reads(int read_length, double max_fraction_unknown_bases_in_reads){
     N_threshold_in_reads = round(read_length*max_fraction_unknown_bases_in_reads);
+}
+void NGSParameters::set_fraction_nonFR_read_pairs(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        fraction_nonFR_read_pairs = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.0\" -----\n";
+    }
+}
+void NGSParameters::set_read_artifacts_rate(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        read_artifacts_rate = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.0\" -----\n";
+    }
 }
 void NGSParameters::set_insertion_error_rate_read1(std::string* paramValue){
     r1_insError_rate = std::stod(*paramValue);
@@ -473,8 +511,17 @@ const std::string* NGSParameters::get_coverage_distribution(){
 double NGSParameters::get_degree_of_GC_bias(){
     return(degree_of_GC_bias);
 }
+int NGSParameters::get_GC_binSize(){
+    return(GC_binSize);
+}
 bool NGSParameters::get_paired_end_sequencing(){
     return(is_paired_end_seq);
+}
+const std::string* NGSParameters::get_fragment_size_distribution_path(){
+    return(&fragment_size_distribution_path);
+}
+bool NGSParameters::get_is_fragment_distribution_from_file(){
+    return(is_fragment_size_distribution);
 }
 int NGSParameters::get_min_DNA_fragment_length(){
     return(min_DNA_fragment_length);
@@ -488,14 +535,20 @@ double NGSParameters::get_mode_DNA_fragment_length(){
 double NGSParameters::get_beta_of_beta_distribution(){
     return(beta_of_beta_distribution);
 }
-/* int NGSParameters::get_max_errors_in_read(){
+int NGSParameters::get_max_errors_in_read(){
     return(max_errors_in_read);
-} */
+}
 double NGSParameters::get_max_fraction_unknown_bases_in_reads(){
     return(max_fraction_unknown_bases_in_reads);
 }
 int NGSParameters::get_N_threshold_in_reads(){
     return(N_threshold_in_reads);
+}
+double NGSParameters::get_fraction_nonFR_read_pairs(){
+    return(fraction_nonFR_read_pairs);
+}
+double NGSParameters::get_read_artifacts_rate(){
+    return(read_artifacts_rate);
 }
 double NGSParameters::get_insertion_error_rate_read1(){
     return(r1_insError_rate);
@@ -598,16 +651,26 @@ void NGSParameters::help_parameter(std::string* paramName){
     }
     else if (*paramName == "degree_of_GC_bias"){
         std::cerr<<" Specify the slope of the lines that make a triangular function for GC bias model. \n"
-        <<" A double value is expected. And the same slope will be used for the +ve and -ve lines. \n"
-        <<" This option to include GC bias is only available for bulk-cell sequencing \n";
+        <<" A double value is expected. And the same slope will be used for the +ve and -ve lines. \n";
+    }
+    else if (*paramName =="bin_size_for_GC_bias_estimation"){
+        std::cerr<<" Specify a non-zero integer value for the bin size. GC bias will be estimated over these bins.\n"
+        <<" Note that the smaller the bin size, the longer the simulation will take to run\n";
     }
     else if (*paramName == "do_paired_end_sequencing"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to perform paired-end sequencing \n";
     }
+    else if (*paramName == "fragment_size_distribution_path"){
+        std::cerr<<" Specify the path to the file containing the DNA fragment size distribution\n"
+        <<" Each row in this file is expected to be space-seperated value pairs corresponding to the DNA fragment size and the normalized count of that fragment respectively\n"
+        <<" Alternatively, the DNA fragment size distribution can be described using a beta function parameters. However, if this parameter is set, \n"
+        <<" then the function will be overriden with the provided distribution.\n";
+    }
     else if (*paramName == "DNA_fragment_length"){
         std::cerr<<" Specify the minimum and maximum lengths of DNA fragments (in bp) obtained after size selection. This is different from the read length. \n"
-        <<" Make sure the minimum and maximum values correspond to the lower and upper limit of the desired distribution respectively\n";
+        <<" Make sure the minimum and maximum values correspond to the lower and upper limit of the desired distribution respectively\n"
+        <<" Alternatively, a file containing fragment size distribution can be provided using the parameter \'fragment_size_distribution_path\' \n";
     }
     else if (*paramName == "mode_DNA_fragment_length"){
         std::cerr<<" Specify the mode DNA fragment size for the desired DNA fragment size distribution. \n"
@@ -623,6 +686,14 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "max_fraction_unknown_bases_in_reads"){
         std::cerr<<" Specify the allowable fraction of bases in a read to be unknown (N's). \n"
         <<" This value should be a double in the range [0,1] \n";
+    }
+    else if (*paramName == "fraction_of_other_oriented_read_pairs"){
+        std::cerr<<" Specify what fraction of the total read pairs needs to be not in inward-orientation in paired-end sequencing. \n"
+        <<" This value should be a double in the range [0,1]\n";
+    }
+    else if (*paramName == "read_artifacts_rate"){
+        std::cerr<<" Specify the read artifacts formation rate for both read 1 and 2 combined. \n"
+        <<" This value should be a double in the range [0,1]\n";
     }
     else if (*paramName == "make_summary_report"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
@@ -766,8 +837,12 @@ void NGSParameters::success_parameter(){
             exit(EXIT_FAILURE);
         }
         set_custom_read_quality_profiles();
+        if(get_read_length() == 0){
+            std::cerr<<"\n ERROR: A non-zero read length must be provided with the custom sequencer \n";
+            exit(EXIT_FAILURE);
+        }
     }
-    set_N_threshold_in_reads(get_read_length(), get_max_fraction_unknown_bases_in_reads());     // Set the threshold on the number of unknown bases in a read
+    //set_N_threshold_in_reads(get_read_length(), get_max_fraction_unknown_bases_in_reads());     // Set the threshold on the number of unknown bases in a read
 
     // Check if the number of cells to sequence is > number of cells in the sample. If true, exit with error
     if (get_num_of_cells_to_sequence() > get_num_of_cells_in_sample()){
@@ -787,26 +862,46 @@ void NGSParameters::success_parameter(){
     }
 
     // Check if GC bias is set for single-cell sequencing and not bulk-cell sequencing
-    if (get_degree_of_GC_bias()!=0.0){
+    /* if (get_degree_of_GC_bias()!=0.0){
         if(*get_sequencing_mode()=="single"){
             std::cerr<<"\n WARNING: GC bias option is not available for single-cell sequencing\n"
             <<"  ----- Re-setting \"degree of GC bias\" to \'0.0\' ----- \n";
             std::string paramValue = "0.0"; std::string paramName = "degree_of_GC_bias"; 
             set_degree_of_GC_bias(&paramName, &paramValue);
         }
+    } */
+    // Check if the bin size provided for calculating GC bias is zero. 
+    if (get_degree_of_GC_bias()!=0.0){
+        if(get_GC_binSize() == 0){
+            temp_str="bin_size_for_GC_bias_estimation"; help_parameter(&temp_str);
+            exit(EXIT_FAILURE);
+        }
     }
+
 
     // If user wants to do paired-end sequencing, make sure the bounds of the DNA fragment length distributions are appropriate. Else exit with error
     if (get_paired_end_sequencing()){
-        if (get_min_DNA_fragment_length()>=get_max_DNA_fragment_length()){
-            std::cerr<<"\n ERROR: The maximum DNA fragment length ("<<get_max_DNA_fragment_length()<<" bp) provided is equal/smaller than the minimum DNA fragment length ("<<get_min_DNA_fragment_length()<<" bp)\n";
-            temp_str= "DNA_fragment_length"; help_parameter(&temp_str);
-            exit(EXIT_FAILURE);
-        }
-        if (get_min_DNA_fragment_length()>=get_mode_DNA_fragment_length() || get_max_DNA_fragment_length()<=get_mode_DNA_fragment_length()){
-            std::cerr<<"\n ERROR: The mode DNA fragment length ("<<get_max_DNA_fragment_length()<<") provided is not between the lower and upper bounds given ( ["<<get_min_DNA_fragment_length()<<","<<get_max_DNA_fragment_length()<<"] )\n";
-            temp_str= "mode_DNA_fragment_length"; help_parameter(&temp_str);
-            exit(EXIT_FAILURE);
+        std::string empty_path = "\"\"";                                                        // Temporary string to hold empty path, which is the default value
+        if(*get_fragment_size_distribution_path()!=empty_path){                                 // If the fragment size distribution from a file should be used, then check the file
+            if (!checkFileExists(get_fragment_size_distribution_path())){
+                std::cerr<<"\n ERROR: Unable to read the fragment size distribution file provided : "<< *get_fragment_size_distribution_path()<<'\n';
+                temp_str= "fragment_size_distribution_path"; help_parameter(&temp_str);
+                exit(EXIT_FAILURE);
+            }else{
+                std::cout<<"\n Successfully read the fragment size distribution file : "<< *get_fragment_size_distribution_path()<<'\n';
+                set_is_fragment_distribution_from_file();
+            }
+        }else{                                                                                 // If the beta function should be used to generate the distribution, then check the beta parameters. 
+            if (get_min_DNA_fragment_length()>=get_max_DNA_fragment_length()){
+                std::cerr<<"\n ERROR: The maximum DNA fragment length ("<<get_max_DNA_fragment_length()<<" bp) provided is equal/smaller than the minimum DNA fragment length ("<<get_min_DNA_fragment_length()<<" bp)\n";
+                temp_str= "DNA_fragment_length"; help_parameter(&temp_str);
+                exit(EXIT_FAILURE);
+            }
+            if (get_min_DNA_fragment_length()>=get_mode_DNA_fragment_length() || get_max_DNA_fragment_length()<=get_mode_DNA_fragment_length()){
+                std::cerr<<"\n ERROR: The mode DNA fragment length ("<<get_max_DNA_fragment_length()<<") provided is not between the lower and upper bounds given ( ["<<get_min_DNA_fragment_length()<<","<<get_max_DNA_fragment_length()<<"] )\n";
+                temp_str= "mode_DNA_fragment_length"; help_parameter(&temp_str);
+                exit(EXIT_FAILURE);
+            }
         }
     }
 

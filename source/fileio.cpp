@@ -14,6 +14,7 @@
 #include <cstring>
 #include <omp.h>
 #include <filesystem>
+#include <algorithm>
 
 #include "fileio.h"
 #include "support_functions.h"
@@ -247,6 +248,91 @@ void readSDDfileData(const std::string* sddfile, NGSsdd& SDDdata, int SDDfilenum
 
     return;
 }
+//------------------------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// A function to read the user-provided text file that has the DNA fragment size distribution data. The file is expected to
+// have two values seperated by a space in each row. Function exits with error if the data format is incorrect. If the 
+// DNA fragment size distribution has a step size other than 1, the function will perform linear interpolation to find
+// data for each step of size 1. Finally, it will normalize the fragment count with the total and return both the minimum
+// DNA fragment length and the normalized fragment count vector
+//------------------------------------------------------------------------------------------------------------------------
+std::pair<int, std::vector<double>> readFragmentSizeDist(const std::string* filename){
+    std::ifstream file(*filename);                                                                      // Starting the ifstream object for the DNA fragment size distribution file
+    std::vector<std::pair<int, double>> fragmentDist;                                                   // Pair of (fragmentLength, normalizedCount) from each row in the file
+    std::string lineData;                                                                               // Temporary string to hold the each row data
+    double total_count{0};                                                                              // Temporary variable to calculate the total normalizedCount 
+
+    while(std::getline(file, lineData)){                                                                // Read each line in the file one by one
+        // geline function assumes that each line in the file ends with '\n' character. But if the line ended with '\r' instead, then all the lines will be read into a single lineData
+        // In such cases, we need to split the lineData into individual data lines first before processing each line.
+        std::vector<std::string> parts;                                                                 // A temporary vector to hold the parts fot the line read from the file
+	    std::size_t currentPos{0};                                                                      // A temporary variable to hold the current position in the loop in a string
+	    std::size_t escapeCharPos;                                                                      // A temporary variable to hold the position in the string where an escape character is found
+
+	    while((escapeCharPos=lineData.find_first_of("\r\n", currentPos)) != std::string::npos){         // Check if an escape character is present in the line that is read (lineData) 
+	        parts.push_back(lineData.substr(currentPos, escapeCharPos - currentPos));                   // Split the string where the first escape character was found and store it as a part
+	        if (lineData[escapeCharPos]=='\r' && escapeCharPos+1<lineData.size() && lineData[escapeCharPos+1]=='\n'){
+	            escapeCharPos++;                                                                        // Increment the position once more if there is a \n character after a \r character
+	        }
+	        currentPos = escapeCharPos+1;                                                               // Move the current position past the position of the escape character
+	    }
+	    parts.push_back(lineData.substr(currentPos));                                                   // Push the final part of the string or the line that had no escape characters, also to the vector 
+
+	    for(size_t i=0; i<parts.size(); i++){                                                           // Process each smaller parts seperately
+	    	std::istringstream ss(parts[i]);                                                            // Convert the string data into a string stream object
+            int length; double count;                                                                   // Temporary varables to hold the fragment length and its normalized count respectively
+            if (!(ss >> length >> count)){
+                std::cerr<<"\n ERROR: The DNA fragment size distribution file provided is not formatted as correctly\n" 
+                <<" Each row in this file is expected to have two values, seperated by a space, that corresponds to the fragment size and normalized count of that fragment respectively\n";
+                exit(EXIT_FAILURE);                                                                     // Exit failure if the file is not formatted correctly
+            }
+            fragmentDist.push_back(std::make_pair(length, count));                                      // Store the values to the vector
+            total_count += count;                                                                       // Calculate the total of all the count
+	    }   
+    }
+    file.close();
+
+    if (fragmentDist.empty()){                                                                          // Exit with error if the file is empty
+        std::cerr <<"\n ERROR: No data found in the DNA fragment size distribution file\n";
+        exit(EXIT_FAILURE); 
+    }
+
+    std::sort(fragmentDist.begin(), fragmentDist.end());                                                // Sort the fragments by length
+
+    int min_fragment_length = fragmentDist.front().first;                                               // Get the minimum fragment length
+    int max_fragment_length = fragmentDist.back().first;                                                // Get the maximum fragment length
+
+    std::vector<std::pair<int, double>> interpolated_fragmentDist;                                      // Temporary vector to hold the complete distribution with the interpolated data
+    if((max_fragment_length-min_fragment_length+1)!=static_cast<int>(fragmentDist.size())){             // If the number of elements is less than expected, then data is missing, needs interpolation
+        interpolated_fragmentDist.push_back(fragmentDist[0]);                                           // Push the first element 
+        int previous_length = fragmentDist[0].first;
+        double previous_count = fragmentDist[0].second; 
+
+        for (size_t i=1;i<fragmentDist.size();i++){                                                     // Iterate over each element to find the ones missing
+            int current_length = fragmentDist[i].first;
+            double current_count = fragmentDist[i].second;
+            while(++previous_length < current_length){                                                  // If the current length is more than 1 value higher, data is missing; perform linear interpolation 
+                double interpolated_count = previous_count+(current_count-previous_count)*(previous_length-fragmentDist[i-1].first)/(current_length-fragmentDist[i-1].first);
+                interpolated_fragmentDist.push_back(std::make_pair(previous_length, interpolated_count));
+                total_count += interpolated_count;                                                      // Include the interpolated values to the total count
+            }
+            interpolated_fragmentDist.push_back(fragmentDist[i]);                                       // Push the original elements also to the new vector
+            previous_length = current_length;                                                           // Update the values 
+            previous_count = current_count;
+        }
+    }else{
+        interpolated_fragmentDist = fragmentDist;                                                       // Continue with the original vector if no data is missing
+    }
+
+    std::vector<double> normalized_counts;                                                              // A temporary vector to hold the normalized fragment counts
+    for (const auto& fragment:interpolated_fragmentDist){
+        normalized_counts.push_back(static_cast<double>(fragment.second)/total_count);                  // Re-normalize the fragment counts
+    }
+    return {min_fragment_length, normalized_counts};                                                    // Return the minimum fragment length and the normalized fragment counts
+}   
 //------------------------------------------------------------------------------------------------------------------------
 
 
@@ -683,7 +769,7 @@ int readFastaMemoryMap(const char* genomeTemplate_data, size_t templateSize, siz
 //------------------------------------------------------------------------------------------------------------------------
 // This function makes read quality distribution vector based on the read quality profile provided in the 'read_quality_file'.
 // These read quality files are expected to be formatted according to the ART read simulation program profiler. 
-// The data must be arrayed in pairs such that each line in the pair has the same identifier and position number.  
+// The data must be arranged in pairs such that each line in the pair has the same identifier and position number.  
 // The first line in a pair is a list of quality scores in ascending order and the second line are the corresponding cumulative
 // frequencies of the quality scores. Identifier can be 'A','T','G','C' and '.' . The identifier indicate if the quality score
 // is specific to a nitrogen base or if it is specified for the combination of all base with '.' 
@@ -725,11 +811,12 @@ void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std
             cumulative_frequency.push_back(frequency); 
         }
 
-        double denominator = cumulative_frequency[cumulative_frequency.size()-1] / 1000000.0;             // denominator = Total cumulative frequency / 1000000
+        unsigned long max_cum_freq = cumulative_frequency[cumulative_frequency.size()-1];                 // Total cumulative frequency to be used for normalization later
         std::map<unsigned int, unsigned short> distribution;                                                
 
         for(size_t i=0; i<cumulative_frequency.size(); i++){
-            unsigned int cc = static_cast<unsigned int>(ceil(cumulative_frequency[i]/denominator));           
+            long double normalized_value = static_cast<long double>(cumulative_frequency[i])/max_cum_freq;// Normalize between 0 and 1
+            unsigned int cc = static_cast<unsigned int>(ceil(normalized_value*10000000.0))+1;             // Scale to the range 0-10000000, then add 1 to shift the range to 1-10000001
             distribution[cc] = quality_score[i];
         }
         if(distribution.size()>0){
@@ -817,6 +904,12 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
                <<" Average GC content of the reference genome                           : "<<report_GC_content*100<<"%\n\n"
                <<" ------ Sequencing information -------\n"
                <<" Name of the Illumina sequencer used for NGS simulation               : "<<*parameter.get_sequencer()<<"\n";
+    if(*parameter.get_sequencer() == "Custom"){
+        report_file<<" Name of the read 1 quality profile file                              : "<<*parameter.get_custom_r1_quality_profile_path()<<"\n";
+        if(parameter.get_paired_end_sequencing()){
+            report_file<<" Name of the read 2 quality profile file                              : "<<*parameter.get_custom_r2_quality_profile_path()<<"\n";
+        }
+    }
     if(*parameter.get_sequencing_mode() == "single"){
         report_file<<" The sequencing protocol used                                         : Single-cell Whole Genome Sequencing\n";
     }else report_file<<" The sequencing protocol used                                         : Bulk-cell Whole Genome Sequencing\n";
@@ -826,19 +919,26 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
         double betaMode = (parameter.get_mode_DNA_fragment_length()-parameter.get_min_DNA_fragment_length())/(parameter.get_max_DNA_fragment_length()-parameter.get_min_DNA_fragment_length());
         double alpha =  ((-betaMode*beta)+(2*betaMode)-1)/(betaMode-1);
         report_file<<" The read generation modality used                                    : Paired-end read generation\n"
-                   <<" The minimum and maximum lengths of the DNA fragments created         : "<<parameter.get_min_DNA_fragment_length()<<", "<<parameter.get_max_DNA_fragment_length()<<"\n"
-                   <<" Function describing the DNA fragment size distribution               : Beta distribution with shape parameters "<<beta<<" (beta) and "
-                   <<alpha<<" (alpha)\n";
+                   <<" Fraction of read pairs in other orientations (not inward-oriented)   : "<<parameter.get_fraction_nonFR_read_pairs()<<"\n";
+        if(parameter.get_is_fragment_distribution_from_file()){
+            report_file<<" Is DNA fragment size distribution specified using an external file   : Yes \n"
+                       <<" Name of the fragment size distribution file used                     : "<<*parameter.get_fragment_size_distribution_path()<<"\n";
+        }else{
+            report_file<<" The minimum and maximum lengths of the DNA fragments created         : "<<parameter.get_min_DNA_fragment_length()<<", "<<parameter.get_max_DNA_fragment_length()<<"\n"           
+                       <<" Function describing the DNA fragment size distribution               : Beta distribution with shape parameters "<<beta<<" (beta) and "
+                       <<alpha<<" (alpha)\n";
+        }    
     }else report_file<<" The read generation modality used                                    : Single-end read generation\n";
     
     int total_reads = std::round(parameter.get_total_read_coverage()*report_ref_seq_length)/parameter.get_read_length();
     report_file<<" Total number of cells in the sample                                  : "<<parameter.get_num_of_cells_in_sample()<<"\n"
                <<" Number of cells randomly sampled from the sample pool for sequencing : "<<parameter.get_num_of_cells_to_sequence()<<"\n"
-               <<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n"
-               <<" Maximum number of acceptable unknown bases (N's) in a read           : "<<parameter.get_N_threshold_in_reads()<<" ("<<(parameter.get_max_fraction_unknown_bases_in_reads()*100)<<"%)\n";
+               <<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n";
+               //<<" Maximum number of acceptable unknown bases (N's) in a read           : "<<parameter.get_N_threshold_in_reads()<<" ("<<(parameter.get_max_fraction_unknown_bases_in_reads()*100)<<"%)\n";
     if(GCBias::get_GCbias_slope()!= 0.0){
         report_file<<" Is the simulation GC biased                                          : Yes \n"
-                   <<" Degree of GC bias simulated                                          : "<<GCBias::get_GCbias_slope()<<"\n";
+                   <<" Degree of GC bias simulated                                          : "<<GCBias::get_GCbias_slope()<<"\n"
+                   <<" Bin size used for GC bias calculation                                : "<<parameter.get_GC_binSize()<<"\n";
     }else report_file<<" Is the simulation GC biased                                          : No \n";
     report_file<<" Total number reads generated in the NGS simulation (expected)        : "<<total_reads<<"\n";
     long reads_actually_generated = std::accumulate(report_readsGenerated_perCell.begin(),report_readsGenerated_perCell.end(),0);
@@ -854,7 +954,8 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
     /*report_file<<" Maximum number of errors allowed per read                            : ";
     if(parameter.get_max_errors_in_read()<0) report_file<<"Unlimited\n";
     else report_file<<parameter.get_max_errors_in_read()<<"\n";*/
-
+    
+    report_file<<" The rate of read artifacts formation                                 : "<<parameter.get_read_artifacts_rate()<<"\n";
     if(parameter.get_paired_end_sequencing()){
         report_file<<" The error-rate used for adding insertions in read 1                  : "<<parameter.get_insertion_error_rate_read1()<<"\n"
                    <<" The error-rate used for adding insertions in read 2                  : "<<parameter.get_insertion_error_rate_read2()<<"\n"

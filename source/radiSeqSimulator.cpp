@@ -44,7 +44,7 @@ int main(int argc, char* argv[]){
     parameters.process_parameterFile(&user_parameter_file, parameters, &dataFolderPath);                        // Set sequencing parameters using user-specified parameter file. Undefined parameters will default
     std::cout<<"\n Successfully completed the parameter file processing \n";
     GCBias::set_GCbias_slope(parameters.get_degree_of_GC_bias());                                               // Set the GC Bias slope from parameters for later. Slope of zero for no bias.
-    GCBias::set_GCbias_binSize(parameters.get_read_length());                                                   // Set the GC fraction calculating bin size as the read length
+    GCBias::set_GCbias_binSize(parameters.get_GC_binSize());                                                    // Set the GC fraction calculating bin size.
 
     //-------------- Stage 2: Reading all the SDD files -----------------//
     NGSsdd SDDdata;                                                                                             // Initializing SDDdata of the class NGSsdd
@@ -69,7 +69,7 @@ int main(int argc, char* argv[]){
     // Build the UndamagedGenomeTemplate file and the memory map
     std::vector<double> ref_chrm_weights;                                                                       // Vector to store the weights of each chromosomes scaled according to its length
     double average_GC_content;                                                                                  // Variable to hold the average GC content of the reference genome. It is (num of G+C)/(ref_seq_length)   
-    long ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome(), ref_chrm_weights, &average_GC_content, parameters.get_read_length());
+    long ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome(), ref_chrm_weights, &average_GC_content, parameters.get_GC_binSize());
     long one_fasta_size = fileSize_bytes(tempFolderPath+"/Undamaged_cell.fa");                                  // Calculate the size of the undamaged cell fasta file. This will be the size of every fasta file
     checkStorageSize(parameters, SDDdata, one_fasta_size);                                                      // Check if there is enough storage space to run this program with the given parameters
     // Make sure the difference between the reference genome length and the MC model length is within the required limit

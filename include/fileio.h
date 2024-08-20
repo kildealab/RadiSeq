@@ -18,6 +18,7 @@ int countExposuresSDD(const std::string*, std::vector<std::streampos>&);        
 std::vector<double> readActualDosefile(const std::string*, int);                                        // function to read a file containing actual dose in each exposure/irradiation
 void readSDDfileHeader(const std::string*, NGSsdd&);                                                    // function to read an SDD file header and obtain values from fields 11 and 15 of the header
 void readSDDfileData(const std::string*, NGSsdd&, int, int, std::vector<std::string>&, int);            // function to read an SDD file data
+std::pair<int, std::vector<double>> readFragmentSizeDist(const std::string*);
 char* createMemoryMappedFile(const std::string&, size_t);                                               // function to create a file with a memory-map and returns the pointer to the memory-map
 char* generateInputFileMemoryMap(const std::string&, size_t&);                                          // function to generate a memory-map of an input file and returns the pointer to the memory-map
 void resizeMemoryMappedFile(char*&, int&, size_t&, size_t);                                             // function to re-map an existing memory mapped file when data exceeds its allotted size 

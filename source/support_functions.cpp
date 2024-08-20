@@ -13,6 +13,7 @@
 #include <zlib.h>
 #include <stdexcept>
 #include <cmath>
+#include <bitset>
 
 
 
@@ -20,28 +21,24 @@
 // This function is used to print the ASCII-art name of the program in the beginning of the output. (Font:Roman)
 //------------------------------------------------------------------------------------------------------
 void ascii_art(){
-std::cout<<"|---------------------------------------------------------------------------------------------|\n"
-         <<"|                                                                                             |\n"
-         <<"|                                    .o8   o8o   .oooooo..o                                   |\n"
-         <<"|                                   \"888   `\"'  d8P'    `Y8                                   |\n"
-         <<"|           oooo d8b  .oooo.    .oooo888  oooo  Y88bo.       .ooooo.   .ooooo oo              |\n"
-         <<"|           `888\"\"8P `P  )88b  d88' `888  `888   `\"Y8888o.  d88' `88b d88' `888               |\n"
-         <<"|            888      .oP\"888  888   888   888       `\"Y88b 888ooo888 888   888               |\n"
-         <<"|            888     d8(  888  888   888   888  oo     .d8P 888    .o 888   888               |\n"
-         <<"|           d888b    `Y888\"\"8o `Y8bod88P\" o888o 8\"\"88888P'  `Y8bod8P' `V8bod888               |\n"
-         <<"|                                                                           888.              |\n"
-         <<"|                                                                           8P'               |\n"
-         <<"|                                                                           \"                 |\n"
-         <<"|                                                                                             |\n"
-         <<"|   .oooooo..o  o8o                                oooo                .                      |\n"
-         <<"|  d8P'    `Y8  `\"'                                `888              .o8                      |\n"
-         <<"|  Y88bo.      oooo  ooo. .oo.  .oo.   oooo  oooo   888   .oooo.   .o888oo  .ooooo.  oooo d8b |\n"
-         <<"|   `\"Y8888o.  `888  `888P\"Y88bP\"Y88b  `888  `888   888  `P  )88b    888   d88' `88b `888\"\"8P |\n"
-         <<"|       `\"Y88b  888   888   888   888   888   888   888   .oP\"888    888   888   888  888     |\n"
-         <<"|  oo     .d8P  888   888   888   888   888   888   888  d8(  888    888 . 888   888  888     |\n"
-         <<"|  8\"\"88888P'  o888o o888o o888o o888o  `V88V\"V8P' o888o `Y888\"\"8o   \"888\" `Y8bod8P' d888b    |\n"
-         <<"|                                                                                             |\n"
-         <<"|---------------------------------------------------------------------------------------------|\n";
+std::cout<<"|------------------------------------------------------------------------------------------------------|\n"
+         <<"|                                                                                                      |\n"
+         <<"|                                                                                                      |\n"
+         <<"|                                                                                                      |\n"
+         <<"|               ooooooooo.                   .o8   o8o   .oooooo..o                                    |\n"                      
+         <<"|               `888   `Y88.                \"888   `\"'  d8P'    `Y8                                    |\n"          
+         <<"|                888   .d88'  .oooo.    .oooo888  oooo  Y88bo.       .ooooo.   .ooooo oo               |\n"
+         <<"|                888ooo88P'  `P  )88b  d88' `888  `888   `\"Y8888o.  d88' `88b d88' `888                |\n"
+         <<"|                888`88b.     .oP\"888  888   888   888       `\"Y88b 888ooo888 888   888                |\n"
+         <<"|                888  `88b.  d8(  888  888   888   888  oo     .d8P 888    .o 888   888                |\n"
+         <<"|               o888o  o888o `Y888\"\"8o `Y8bod88P\" o888o 8\"\"88888P'  `Y8bod8P' `V8bod888                |\n"
+         <<"|                                                                                   888.               |\n"
+         <<"|                                                                                   8P'                |\n"
+         <<"|                                                                                   \"                  |\n"
+         <<"|                                                                                                      |\n" 
+         <<"|                                                                                                      |\n"
+         <<"|                                                                                                      |\n"
+         <<"|------------------------------------------------------------------------------------------------------|\n";
 }
 //------------------------------------------------------------------------------------------------------
 
@@ -433,8 +430,8 @@ double GCBias::slope = 0.0;                                                     
 //double GCBias::peak = 0.0;
 int GCBias::bin_size = 0.0;
 
-void GCBias::set_GCbias_binSize(int read_size){                                                         // Function to set the bin size over which GC fraction will be determined
-    bin_size = read_size;                                                                               // Set the bin size to be equal to the read size 
+void GCBias::set_GCbias_binSize(int GC_binSize){                                                        // Function to set the bin size over which GC fraction will be determined
+    bin_size = GC_binSize;                                                                              // Set the bin size to be equal to the read size 
 }
 void GCBias::set_GCbias_slope(double degree_of_GC_bias){                                                // Function to set the slope (m) value to the degree of GC bias user provided
     slope = degree_of_GC_bias;
@@ -446,8 +443,36 @@ double GCBias::get_GCbias_slope(){                                              
     peak = mean_GC_content;
 } */
 double GCBias::get_GCfraction(const std::string& chrm_seg_seq){
-    double GCfraction_bin{0};
-    size_t bin_count = chrm_seg_seq.size()/bin_size;
+    double GCfraction_bin{0.0};
+    std::bitset<256> isN;
+    std::bitset<256> isGC;
+    isN.set('N');                                                                                       // Set the character bit to be of 'N'   
+    isGC.set('G');                                                                                      // Set the character bit to be of 'G'              
+    isGC.set('C');                                                                                      // Set the character bit to be also of 'C'
+    int GC_count{0};    
+    int N_count{0};
+    int num_GC_bins{0};
+    for(size_t i=0; i<chrm_seg_seq.size(); i++){
+        char currentChar = chrm_seg_seq[i]; 
+        if(isGC.test(static_cast<unsigned char>(currentChar))) GC_count++;                              // Increase the GC count if G or C
+        if(isN.test(static_cast<unsigned char>(currentChar))) N_count++;                                // Increase the N count if N
+        if((i+1)%bin_size==0){                                                                          // If i+1 index is a multiple of the GC_binSize
+            if((bin_size-N_count)!= 0){                                                                 // Bin fraction should only be calulated if not all elements in the bin are N
+                GCfraction_bin += (static_cast<double>(GC_count/(bin_size-N_count)));
+            }
+            num_GC_bins++; GC_count = 0; N_count = 0;                                                   // Increase the bin count and reset other counters
+        }
+    }
+    int unprocessed_segment = chrm_seg_seq.size()-(num_GC_bins*bin_size);                               // Find if there is more sequence than the full bins or if the sequence is smaller than one binSize
+    if (unprocessed_segment>100){                                                                       // Calculate the GC fraction is the remaining sequence is long enough. 100 is selected randomly (read length is ideal)
+        if((unprocessed_segment-N_count) != 0){
+            GCfraction_bin += (static_cast<double>(GC_count/(unprocessed_segment-N_count)));
+        }
+        num_GC_bins++;
+    }
+
+    /* size_t bin_count = chrm_seg_seq.size()/bin_size;
+    if (bin_count == 0){return 0.0;}                                                                    // Return if chrm seg size < bin size
     for (size_t i=0; i<bin_count; i++){
         size_t bin_start = i * bin_size;
         size_t bin_end = bin_start+bin_size;
@@ -462,10 +487,13 @@ double GCBias::get_GCfraction(const std::string& chrm_seg_seq){
                 bin_N_count++;                                                                          // Increment 'N' count
             }
         }
+        if (bin_size == bin_N_count){return 0.0;}                                                       // Return if all the elements of the bin are N's
         GCfraction_bin += (static_cast<double>(bin_GC_count)/(bin_size-bin_N_count));                   // GC fraction should be calculated with the total non-N bases counted
-    }
-    return (GCfraction_bin/bin_count);                                                                  // This is the mean GC fraction of the current chromosome segment 
+    } */
+    //return (GCfraction_bin/bin_count);                                                                  // This is the mean GC fraction of the current chromosome segment 
+    return num_GC_bins!=0 ? (GCfraction_bin/num_GC_bins):0.0; 
 }
+
 double GCBias::get_GCbias(double GC_content){                                                           // Get the bias value from the traingualar bias function specified by the slope and peak
     double bias{0};                                                                                     // Variable to hold the y value in the line equation
     if(GC_content<=0.5){                                                                                // For x <= X1

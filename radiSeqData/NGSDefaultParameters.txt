@@ -60,7 +60,11 @@ coverage_distribution                       = Uniform                 # Specify 
 
 degree_of_GC_bias                           = 0.0                     # Specify the slope of the linear portions of the triangular function used for GC bias. Expects a double value.
 
+bin_size_for_GC_bias_estimation             = 10000                   # Specify the bin size to be used for GC bias calculations. 
+
 do_paired_end_sequencing                    = True                    # "True" if the user wishes to perform paired-end sequencing. 
+
+fragment_size_distribution_path             = ""                      # Specify the path to the file containing the DNA fragment size distribution 
 
 min_DNA_fragment_length                     = 200                     # Minimum DNA fragment size (in bp) obtained after size selection if paired-end sequencing.
 
@@ -70,11 +74,15 @@ mode_DNA_fragment_length                    = 400                     # Mode val
 
 beta_of_beta_distribution                   = 4.5                     # Beta parameter value for the beta distribution that will be used to represent the fragment size distribution
 
-#maximum_errors_in_reads                     = -1                      # Specify the maximum number of indel errors that you are okay to have in a read. 
+maximum_errors_in_reads                     = -1                      # Specify the maximum number of indel errors that you are okay to have in a read. 
                                                                       # Default value of -1 indicates that there is no limit or threshold to the number of errors in a read
 
-max_fraction_unknown_bases_in_reads         = 1.0                     # Specify what fraction of the bases in a read can be unknown ('N'). Reads with more than this threshold will be ignored.
+#max_fraction_unknown_bases_in_reads         = 1.0                     # Specify what fraction of the bases in a read can be unknown ('N'). Reads with more than this threshold will be ignored.
                                                                       # Expect a double value in range 0 to 1. 
+
+fraction_of_other_oriented_read_pairs       = 0.0                     # Specify what fraction of the read pairs needs to be in orientations other than inward-oriented (RF, FF, RR read pairs)
+
+read_artifacts_rate                         = 0.0                     # Specify the read artifact formation rate for both read 1 and 2 combined
 
 read1_insertion_error_rate                  = 0.00002                 # Specify the insertion error rate for read 1. Expects a double value between 0 and 1
                                                                       # Default value obtained from ART program. 

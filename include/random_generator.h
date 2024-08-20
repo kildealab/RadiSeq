@@ -30,7 +30,7 @@ namespace rng{
     inline void initThreadLocalFixedSeed(unsigned int seed, int nThreads){
         local_mt.resize(nThreads);                                                               // Create a vector to hold nThread instances of the random engine
         for (int i=0; i<nThreads; i++){                                                          // Iteration starts from 1 because 0 correponds to the master thread
-            local_mt[i] = std::mt19937(seed);
+            local_mt[i] = std::mt19937(seed+i);                                                  // Each thread will get a different seed but still reproducible
         }
     }
 
@@ -64,7 +64,7 @@ namespace rng{
     // each with a success probability of p. It returns the complement of the cumulative distribution function (CDF), 
     // which represents the probability of observing a value greater than or equal to k.
     // Fourth optional argument can be used to switch to thread-local RNG engine if needed
-    /* inline double binomial_cdf(size_t k, double p, size_t n, int threadID = 0){
+    inline double binomial_cdf(size_t k, double p, size_t n, int threadID = 0){
         std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
         std::binomial_distribution<size_t> dist(n, p);
         size_t successes = 0;
@@ -75,7 +75,7 @@ namespace rng{
 
         double probability = 1.0 - static_cast<double>(successes+1) / static_cast<double>(n);    // Probability of observing at most k successes (1 - probability of observing at least k+1 successes)
         return probability;
-    } */
+    } 
 
     inline size_t binomial_distribution(double p, size_t n, int threadID = 0){
         std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
@@ -84,7 +84,7 @@ namespace rng{
     }
     // Function to generate a double value randomly in a gaussian (normal) distribution specified with mean and stdDev
     // Third optional argument can be used to switch to thread-local RNG engine if needed
-    /*inline double normal_distribution(double mean, double stdDev, int threadID = 0){
+    /*]inline double normal_distribution(double mean, double stdDev, int threadID = 0){
         std::mt19937& generator = local_mt[threadID];                                            // Switch to the generator engine instance accordingly based on threadID
         std::normal_distribution<double> dist(mean, stdDev);
         return dist(generator);
