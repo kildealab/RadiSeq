@@ -60,7 +60,10 @@ void ART::initiate_read_generation(int read_len, int User_GC_binSize, double fra
     read_artifacts_rate_dist.clear();
     double fraction_inward_readPairs = 1.0-fraction_nonFR_readPairs;                                    // Fraction of inward-oriented(FR) read pairs is assumed to be all pairs other than outward-oriented(RF) ones
     double fraction_outward_readPairs = fraction_nonFR_readPairs * 2/3;                                 // 2/3 rd of the other read orientation is expected to be RF (outward orientation)
-    double fraction_other_readPairs = fraction_nonFR_readPairs - fraction_outward_readPairs;            // Whatever is not outward and inward will be used to generate FF and RR orientations
+    double fraction_other_readPairs{0};
+    if((fraction_inward_readPairs+fraction_outward_readPairs)<1.0){
+        fraction_other_readPairs = 1.0-(fraction_inward_readPairs+fraction_outward_readPairs);          // Whatever is not outward and inward will be used to generate FF and RR orientations
+    }
     for(double val : {fraction_inward_readPairs, fraction_outward_readPairs, fraction_other_readPairs}){// Push these read orientation fractions to the vector for later use. 
         read_pair_orientation_dist.push_back(val);
     }

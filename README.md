@@ -24,7 +24,7 @@ Website: [www.kildealab.com](https://kildealab.com/software/radiseq_simulator/)
 ## Description
 Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. <br>
 
-![Logo](https://github.com/felixmat/radiSeq_Simulator/blob/main/radiSeq%20Simulator.svg)
+![Logo](./figures/radiSeq%20Simulator.svg)
 
 ## Features
 
@@ -72,6 +72,11 @@ A successful test run will generate FASTQ output files and a run summary file in
 
 **Note**: This test example is using made-up data for the sole purpose of testing if the installation was successful. We advise against using it for any simulation observation. User can create their own [input parameter files](#input-parameters) to run specific simulations 
 
+### Generating custom sequencer profiles
+The RadiSeqProfiler program can be used to generate error profiles of custom Illumina sequencers of choice. However, users are expected to have the sequenced read data, obtained using the sequencer they wish to generate the profile for, in .fastq.gz format. For each of the reads in the read pairs, following command can be used to generate the corresponding error profile.<br>
+* `cd path/to/RadiSeq`
+* `./RadiSeqProfiler -f <path/to/fastq.gz> -o <outputFile.txt>`<br>
+
 ## Input parameters
 
 The user should specify all the input parameters for the simulation in a parameter text(.txt) file. Users can make any text file a parameter file with a filename
@@ -96,6 +101,8 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | custom_read2_quality_profile_path | Complete path to the read 2 quality profile file when custom sequencer is chosen and paired-end sequencing is needed | path to file (string) |
 | single_or_bulk_sequencing | Flag to specify if single-cell or bulk-cell sequencing is to be performed | 'single' or 'bulk' |
 | do_paired_end_sequencing | Flag to indicate if paired-end sequencing to be performed | 'True' or 'False' |
+| fraction_of_other_oriented_read_pairs | The fraction of read pairs needs to be in orientations other than forward-reverse (FR) | Number in the range [0,1] (double) |
+| fragment_size_distribution_path | Complete path to the text (.txt) file that stores the fragment size distribution | Path to file (string) |
 | min_DNA_fragment_length | Minimum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
 | max_DNA_fragment_length | Maximum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
 | mode_DNA_fragment_length | Mode DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
@@ -104,11 +111,12 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | total_read_coverage | Total read coverage the user wants to get from this sequencing. If single-cell sequencing the read coverage will get distributed over the total number of cells sequenced | Number (integer) |
 | coverage_distribution | Read coverage distribution mode to be used in single-cell sequencing | 'Uniform' or be 'MDA' |
 | degree_of_GC_bias | Slope of the linear portions of the triangular function used for GC bias | Number (double) |
-| max_fraction_unknown_bases_in_reads | Fraction of the bases in a read can be unknown ('N'). Reads with more than this threshold will be ignored | Number in range [0,1] (double) |
+| bin_size_for_GC_bias_estimation | The bin size to be used to calculate the GC fraction and bias | Number (integer) |
 | read1_insertion_error_rate | Insertion error rate for read 1. Expects a double value between 0 and 1 | Number (double) |
 | read1_deletion_error_rate | Deletion error rate for read 1. Expects a double value between 0 and 1 | Number (double) |
 | read2_insertion_error_rate | Insertion error rate for read 2. Expects a double value between 0 and 1 | Number (double) |
 | read2_deletion_error_rate | Deletion error rate for read 2. Expects a double value between 0 and 1 | Number (double) |
+| read_artifacts_rate | The rate of chimera artifact formation in read 1 and 2 combined | Number in the range [0,1] (double) |
 | output_directory_path | Complete path to the directory where the output fastq files and the run summary file should be stored | Path to directory (string) |
 | output_FASTQ_filename_prefix | Prefix for the sequenced output FASTQ file (omit file extension) | String |
 | make_summary_report | Flag to indicate if the user wishes to generate a summary report file at the end of run | 'True' or 'False' |
@@ -127,7 +135,7 @@ If a single-cell MC model is irradiated with two different radiation qualities (
 Monte Carlo simulation of cell irradiation may deliver a higher dose to the cell model than what is specified in the irradiation simulation since the dose each radiation track will deposit is descrete. This phenomenon is more prenounced when the irradiated dose is small. However, RadiSeq provides the option for the user to compensate for additional dose and for that the user can set the input parameter flag 'adjust_damages_with_actual_dose'. However, if the flag is set to be 'true', then the user must also provide the path to a text file that has the information about the actual dose that was delivered as the input parameter: 'actual_dose_delivered_data'. For example, if you have an SDD file with 100 repeated irradiations that were supposed to deliver 1 Gy dose in each irradiation but exceeded this value, then you can compensate for this by providing a text file with 100 rows of data (each row corresponding to the actual dose delivered in the respective repeated irradiation).
 
 ### 3. Simulating sequencing of sham-irradiated control samples
-RadiSeq expect an SDD file as a required paramter in every simulation. And that is true even if the user wishes to simulate sequencing of un-irradiated/sham-irradiated cell samples. The way around to perform such simulation is to use a dummy SDD file with the header data corresponding to the cell model but with empty data fields. 
+RadiSeq expect an SDD file as a required paramter in every simulation. And that is true even if the user wishes to simulate sequencing of un-irradiated/sham-irradiated cell samples. The way around to perform such simulation is to use a dummy SDD file with the header data corresponding to the cell model but with empty data fields. A sham-irradiated human cell sample generated using the NICE model can be obtained from `./radiSeqData/SDDOutput_0GY.txt`.
 
 ### 4. Simulating an Illumina sequencer that is not in the in-built sequencer list
 RadiSeq comes with 6 Illumina sequencer models built-in. It also has the capability to extend this if the user wishes to simulate other Illumina sequencers with the 'Custom' option for the input parameter: 'illumina_sequencer'. However, user will have to provide their own read quality profiles for the sequencer they want to simulate. The paths to the files containing the read quality profile of read 1 and read 2 (if paired-end sequencing) is expected for the parameters 'custom_read1_quality_profile_path' and 'custom_read2_quality_profile_path' respectively. The [ART_profiler_illumina tool](https://www.niehs.nih.gov/research/resources/software/biostatistics/art/index.cfm) from the ART toolkit can be used to generate compatible quality profiles.
@@ -136,7 +144,7 @@ RadiSeq comes with 6 Illumina sequencer models built-in. It also has the capabil
 ### 5. Modifying DNA fragment size distribution in paired-end sequencing
 The DNA fragment size distribution is modelled as a beta distribution in RadiSeq. Users can modify the fragment size distribution using the four input parameters: 'min_DNA_fragment_length', 'max_DNA_fragment_length', 'mode_DNA_fragment_length' and 'beta_of_beta_distribution'. As the name suggests, these parameters control the minimum, maximum, mode and beta values of the beta distribution respectively. While minimum and maximum values defines the range of the generated DNA fragment lengths, mode and beta values dictate the shape of the fragment size distribution. Below here is an example showing the effect of different beta values on the distribution for a minimum fragment length of 150bp, maximum fragment length of 1000bp and a mode of 350bp. <br>
 
-![Beta distribution](https://github.com/felixmat/radiSeq_Simulator/blob/dev/Beta_distributions.png)
+![Beta distribution](./figures/Beta_distributions.png)
 
 ### 6. Enabling GC bias model
 A unimodal distribution is desirable for GC bias in sequencing. i.e, both genomic regions with higher GC content (GC-rich) and lower GC content (AT-rich) are expected to be sampled less than a region that has more balanced GC content. RadiSeq uses a combination of two linear models to form a triangular distribution as an approximation of the underlying GC bias in a simulation. Users can control the degree of this bias using the input parameter called 'degree_of_GC_bias'. This parameter specifies the slope of the linear models. By default a slope of 0 is used in RadiSeq. If GC bias model needs to be enable, one should specify a degree_of_GC_bias higher than 0. Higher the degree of bias, higher the slope and hence we get higher GC bias. GC bias is calculated over a sliding window of size equal to the read length.
@@ -145,8 +153,7 @@ A unimodal distribution is desirable for GC bias in sequencing. i.e, both genomi
 
 ## Acknowledgements
 
-Some of the in-built Illumina sequencer error profiles and the read generation method used in the RadiSeq were adopted from the ART Illumina sequencing tool published open-source by the US National Institute of Health.
-We sincerely thank the authors Weichun Huang et al. for making the ART toolkit available open-source. 
+Some of the in-built Illumina sequencer error profiles and the read generation method used in the RadiSeq were adopted from the ART Illumina sequencing tool published open-source by the US National Institute of Health. We sincerely thank the authors Weichun Huang et al. for making the ART toolkit available open-source as well as the developers of other open-source sequencing software.
 
 To learn more about the ART toolkit:
 
