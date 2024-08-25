@@ -1,6 +1,7 @@
 # RadiSeq
 
-This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. RadiSeq can perform both bulk- and single-cell whole genome DNA sequencing.
+This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. RadiSeq can perform both bulk- and single-cell whole genome DNA sequencing.<be>
+[![DOI](https://zenodo.org/badge/666482390.svg)](https://zenodo.org/doi/10.5281/zenodo.13371311)
 
 
 ## Table of Contents
