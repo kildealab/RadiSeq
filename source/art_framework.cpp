@@ -155,13 +155,21 @@ void ART::set_read_error_rates(double ins_rate, double del_rate){
 // to generate phi29 binding sites in the chromosome segment
 //--------------------------------------------------------------------------------------------
 bool ART::int_set(std::string& chromSeq, int nThreads){
+    valid_region = 0;
+    //if (chromSegSeq != nullptr && *chromSegSeq != chromSeq){                                                                        // Clear the pointer if it already has a value
+    //    chromSegSeq->clear();  
+    //}
     valid_region = chromSeq.size() - read_length;
     if(valid_region<1) return false;                                                                    // If read length is >= chromSegmentSeq length, then do not proceed with the chromSegmentSeq
     chromSegSeq = &chromSeq;
+    //if(chromSegSeq->length() <= static_cast<size_t>(read_length)){ return false;}
     indel_map_vec.clear();                                                                              // Clear any pre-existing data
     read_seq_vec.clear();
     indel_map_vec.resize(nThreads);                                                                     // Resize the vector to accomodate all threads
     read_seq_vec.resize(nThreads);
+    forbidden_bins.clear();                                                                             // Reset the list of forbidden bins
+    GCbins_bias.clear();                                                                                // Reset the GC bias vector for each chrom segment
+    cum_GCbins_bias.clear();                                                                            // Reset the cumulative GC sites bias vector for each chrom segment
     return true;
 }
 //--------------------------------------------------------------------------------------------
@@ -267,16 +275,16 @@ int ART::get_read_length(){
 
 //--------------------------------------------------------------------------------------------
 // This function calculates the GC bias in a chromosome segment for a bin size specified and
-// populate the vector GCbinss_bias. 
+// populate the vector GCbins_bias. 
 //--------------------------------------------------------------------------------------------
 bool ART::GCbias_maker(int minFragSize){
-    forbidden_bins.clear();                                                                             // Reset the list of forbidden bins
-    GCbins_bias.clear();                                                                                // Reset the GC bias vector for each chrom segment
-    cum_GCbins_bias.clear();                                                                            // Reset the cumulative GC sites bias vector for each chrom segment
+    //forbidden_bins.clear();                                                                             // Reset the list of forbidden bins
+    //GCbins_bias.clear();                                                                                // Reset the GC bias vector for each chrom segment
+    //cum_GCbins_bias.clear();                                                                            // Reset the cumulative GC sites bias vector for each chrom segment
     const size_t chromSeqLength = chromSegSeq->length();                                                // Pre-calculate the chromosome length and store it to avoid repeated calculations
-    if(chromSeqLength < static_cast<size_t>(read_length)) return false;                                 // Return false if chromosome is smaller than read length
     double GCslope = GCBias::get_GCbias_slope();                                                        // Temporary variable to hold the GC biase slope to avoid calling the function again and again
     if(GCslope == 0.0) return true;                                                                     // If the degree of GC bias is zero, no need to calculate further. Continue with empty forbidden list
+    if(chromSeqLength < static_cast<size_t>(read_length)) return false;                                 // Return false if chromosome is smaller than read length
     std::bitset<256> isN;
     std::bitset<256> isGC;
     isN.set('N');                                                                                       // Set the character bit to be of 'N'  
@@ -412,8 +420,8 @@ bool ART::MDA_distribution_maker(long num_reads_per_segment, double coverage_per
 // is specified to be MDA, then appropriate read distribution will be generated.
 //--------------------------------------------------------------------------------------------
 void ART::generate_read_with_indel(int threadID){
-    long start_position;                                                                                // Variable to hold the starting position for a read
-    long start_bin;
+    long start_position{0};                                                                             // Variable to hold the starting position for a read
+    long start_bin{0};
     do{
         if(wga_technique == "mda"){                                                                     // If MDA, then randomly select an amplicon and generate a read from the amplicon randomly (option only for single-cell seq)
             int amplicon = rng::weighted_rand_int(initial_MDAsites_bias,threadID)-1;                    // Choose an amplicon from the initial primer sites according to the MDA bias; -1 to get the index of that site in the initial_MDAsites vector
@@ -441,6 +449,7 @@ void ART::generate_read_with_indel(int threadID){
     } 
   
     std::string read_template_seq = (*chromSegSeq).substr(start_position, read_length-length_changed);  // Obtain the read template sequence from the chromSegmentSeq 
+    //std::string read_template_seq = (*chromSegSeq).substr(start_position, std::max(read_length, read_length-length_changed));// Obtain the read template sequence from the chromSegmentSeq 
     int is_read_chimeric = rng::weighted_rand_int(read_artifacts_rate_dist);                            // Check if this read needs to be generated with a chimeric artifact
     if (is_read_chimeric == 1){                                                                         // If chimeric artifact need to be included, do that
         generate_chimeric_read(read_template_seq, threadID);
@@ -591,7 +600,11 @@ int ART::get_balanced_indel_map(int threadID){
     // Processing deletions and ensures the number of deletions are not more than the number of insertions
     if(deletion_rate){
         int max_possible_deletion = std::min(insertion_length, (read_length-insertion_length));         // Limit the deletion length to the minimum of insertion length or the unchanged read portion
-        deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, max_possible_deletion, threadID)); // Make sure the maximum number of deletions is <= the number of insertions
+        if (max_possible_deletion==0){
+            deletion_length = 0;
+        }else{
+            deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, max_possible_deletion, threadID)); // Make sure the maximum number of deletions is <= the number of insertions
+        }
     }                                                             
     if(deletion_length>0){                                                
         for(int j=deletion_length; j>0;){                                                               // Make X deletions at random in the read and make a map of the deletions made in a read
@@ -661,10 +674,11 @@ int ART::get_balanced_indel_map(int threadID){
 // which then gets replaced with it reverse complement and the modified read is returned. 
 //--------------------------------------------------------------------------------------------
 void ART::generate_chimeric_read(std::string& read, int threadID){
-    int min_chimeric_length = static_cast<int>(read_length*1/4);                                        // Minimum is set to be atleast as long as 1/4th of the read length                         
-    int max_chimeric_length = static_cast<int>(read_length*3/4);                                        // Maximum is set to be at most as long as 3/4th of the read length
+    int seg_length = static_cast<int>(read.length());                                                   // Variable to hold the length of the passed read template (not always equal to read length)
+    int min_chimeric_length = static_cast<int>(seg_length*1/4);                                         // Minimum is set to be atleast as long as 1/4th of the read length                         
+    int max_chimeric_length = static_cast<int>(seg_length*3/4);                                         // Maximum is set to be at most as long as 3/4th of the read length
     int chimeric_length = rng::rand_int(min_chimeric_length, max_chimeric_length, threadID);            // Randomly obtain the length of the chimera between the minimum and maximum lengths
-    int chimeric_position = rng::rand_int(0, read_length-chimeric_length, threadID);                    // Randomly determine where in the read the chimera needs to be
+    int chimeric_position = rng::rand_int(0, seg_length-chimeric_length, threadID);                     // Randomly determine where in the read the chimera needs to be
     std::string read_segment = read.substr(chimeric_position,chimeric_length);                          // Cut out the portion of the read where the chimera needs to be
     std::string chimeric_insert;                                                                        // Temporary string to hold the chimeric sequence
     getReverseComplementarySeq(read_segment, chimeric_insert);                                          // Obtain the chimeric sequence as the reverse complement of the read segment
@@ -690,13 +704,16 @@ void ART::read_maker(std::string& read_template_seq, int threadID){
         return;
     }
     int k{0};
-    for(size_t i=0; i<read_template_seq.size();){
+    size_t template_length = read_length;
+    for(size_t i=0; i<template_length;){
         if(indel_map.count(k) == 0){                                                                    // For a base location that was unaltered, obtain the base from the chromosome sequence
             read_seq.push_back(read_template_seq[i]); i++; k++; 
         }else if(indel_map[k] == '-'){                                                                  // If the base location corresponds to a deletion, ignore that base
             i++;k++;
+            template_length++;
         }else{                                                                                          // If the base location corresponds to an insertion, get the base value from the indel map itself
             read_seq.push_back(indel_map[k]); k++;
+            template_length--;
         }
     }
     while(indel_map.count(k)>0){                                                                        // If there are more indels in the map that is not already processed, then include them as well
@@ -779,19 +796,28 @@ void ART::add_baseCall_error(std::vector<short>& read_quality_vec, int threadID)
 // two reads will be generated from opposite ends of the same fragment.
 //--------------------------------------------------------------------------------------------
 bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFragSize, std::vector<double>& fragment_weights, int threadID){
-    const std::string& chromSegmentSeq = *chromSegSeq;                                                  // Variable holding chromosome segment sequence
     
     // Determine the fragment length to be simulated from the chromSegmentSequence. 
-    long chromSegment_length = chromSegmentSeq.length();                                                // Variable to hold the length of the chromosome segment being processed                               
+    long chromSegment_length = chromSegSeq->length();                                                   // Variable to hold the length of the chromosome segment being processed                               
     long fragment_length{0};                                                                            // Variable to hold the fragment length that needs to be simulated
+    const int MAX_ITERATIONS = 1000;                                                                    // Set the maximum number of bad fragment sampling attempts that can be allowed (to avoid infinite loops)
+    int bad_sampling{0};                                                                                // Variable to count the number of bad sampling counts
     while(true){                                                                                        // Repeat fragmentation until a successful fragment is obtained
-        if(minFragSize >= chromSegment_length){                                                         // If chromSegment length <= minimumFragment length, then set fragment length to be chromSegmentSeq length
-            fragment_length = chromSegment_length;
+        if(minFragSize >= chromSegment_length){                                                         // If chromSegment length <= minimumFragment length, then set fragment length to be chromSegmentSeq length - 1
+            fragment_length = std::max(chromSegment_length-1, static_cast<long>(read_length));
             break;
         }else{                                                                                          // Else randomly sample a fragment length from the beta distribution weights
             int minRandomFragSize = minFragSize + rng::weighted_rand_int(fragment_weights, threadID)-1;
             fragment_length = std::max(minRandomFragSize, read_length);                                 // Ensure fragment length is at least read_length
-            if(fragment_length <= chromSegment_length){                                                 // Break the loop when a fragment length that is <= chromosome segment length is obtained
+            int frag_bin = (floor(static_cast<int>(chromSegment_length)-fragment_length)/GC_binSize);   // Index of the bin where this fragment start can atmost be
+            if(GCBias::get_GCbias_slope() != 0.0 && cum_GCbins_bias[frag_bin] == 0.0){                  // If the cumulative bias upto this bin is zero, then the fragment size is not usable. Need another fragment size
+                bad_sampling++;                                                                         // Increment bad sampling count
+                continue;
+            }else if(fragment_length < chromSegment_length){                                            // Break the loop when a fragment length that is < chromosome segment length is obtained
+                break;
+            }
+            if(bad_sampling>MAX_ITERATIONS){                                                            // If we sampled badly more than the threshold, assign minFragSize as the size of the fragment and proceed
+                fragment_length = minFragSize;
                 break;
             }
         }
@@ -807,8 +833,8 @@ bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFrag
     if((read_length-length_changed_2) > fragment_length){                                               // Check if the generated read map appropriate for read 2 
         length_changed_2 = read_2.get_balanced_indel_map(threadID);                                     // Re-generate the indel map for read 2 if needed
     } 
-    long start_position_1;                                                                              // Variable to hold the starting location of the fragment
-    long start_position_2;
+    long start_position_1{0};                                                                           // Variable to hold the starting location of the fragment
+    long start_position_2{0};
 
     if(wga_technique == "mda"){
         int amplicon = rng::weighted_rand_int(initial_MDAsites_bias,threadID)-1;                        // Choose an amplicon from the initial primer sites according to the MDA bias; -1 to get the index of that site in the initial_MDAsites vector
@@ -846,7 +872,12 @@ bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFrag
             auto it = std::lower_bound(cum_GCbins_bias.begin(), (cum_GCbins_bias.end()), random_binBias); // Find the first position in the available region of the cum_GCsites_bias vector where the cumulative sum is greater than or equal to a randomly generated number (random_number)
             if(it != cum_GCbins_bias.end()){                                                            // If there is a bin that meets the condition
                 long selected_bin = std::distance(cum_GCbins_bias.begin(), it);                         // Get the index of that bin
-                long binStart = selected_bin*GC_binSize;                                                // Starting position of the selected bin    
+                long binStart{0};                                                                       // Variable to hold the starting position of the selected bin    
+                if(selected_bin<=num_available_fullBins){                                               // When the selected bin is a full bin
+                    binStart = selected_bin*GC_binSize; 
+                }else{                                                                                  // If the selected bin is the final non-full bin
+                    binStart = num_available_fullBins*GC_binSize; 
+                }
                 long binEnd = std::min(available_region, ((selected_bin+1)*GC_binSize));                // Ending position of the selected bin or the end of available region; whichever is the smallest
                 start_position_1  = rng::rand_int(binStart,binEnd);                                     // Find a position in this bin to generate the read randomly, since the bias in a bin is uniform
             }else{                                                                                      // If  the condition is not met for some reason, return false. 
@@ -856,7 +887,7 @@ bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFrag
             start_position_1 = static_cast<long>(floor((chromSegment_length-fragment_length)*rng::rand_double(0,1, threadID))); // Starting position for read 1
         }
     }
-    start_position_2 = (start_position_1+fragment_length)-(read_length-length_changed_2);               // This would be the starting position for read 2 in forward strand
+    start_position_2 = (start_position_1+fragment_length)-(std::max(read_length, read_length-length_changed_2));               // This would be the starting position for read 2 in forward strand
     long bin_1 = (start_position_1/GC_binSize)+1; long bin_2 = (start_position_2/GC_binSize)+1;         // Find the bins in which starting position 1 and 2 belong
     if((forbidden_bins.find(bin_1) != forbidden_bins.end()) || (forbidden_bins.find(bin_2) != forbidden_bins.end())) return false; // Make sure both starting bins are not forbidden 
     //long start_position_2 = chromSegment_length-fragment_length-start_position_1;                       // This would be the starting position for read 2. Must be on the reverse-complementary strand
@@ -869,8 +900,10 @@ bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFrag
     } */
     //std::string chromSegmentSeq_revComp;                                                                // Temporary string to hold the reverse complementary strand with same damages to make the paired-red from opposite end of the fragment
     //getReverseComplementarySeq(chromSegmentSeq, chromSegmentSeq_revComp);                               // Make the reverse complementary sequence strand
-    std::string read1_forward_seq = chromSegmentSeq.substr(start_position_1, read_length-length_changed_1); // Obtain the read template sequence from the chromSegmentSeq for read 1 (in forward strand)
-    std::string read2_forward_seq = chromSegmentSeq.substr(start_position_2, read_length-length_changed_2); // Obtain the read template sequence from the chromSegmentSeq for read 2 (in forward strand)
+    //std::string read1_forward_seq = chromSegmentSeq.substr(start_position_1, read_length-length_changed_1); // Obtain the read template sequence from the chromSegmentSeq for read 1 (in forward strand)
+    //std::string read2_forward_seq = chromSegmentSeq.substr(start_position_2, read_length-length_changed_2); // Obtain the read template sequence from the chromSegmentSeq for read 2 (in forward strand)
+    std::string read1_forward_seq = (*chromSegSeq).substr(start_position_1, std::max(read_length, read_length-length_changed_1)); // Obtain the read template sequence from the chromSegmentSeq for read 1 (in forward strand)
+    std::string read2_forward_seq = (*chromSegSeq).substr(start_position_2, std::max(read_length, read_length-length_changed_2)); // Obtain the read template sequence from the chromSegmentSeq for read 2 (in forward strand)
     std::string read1_template_seq;                                                                     // Temporary string to hold the correctly oriented read 1
     std::string read2_template_seq;                                                                     // Temporary string to hold the correctly oriented read 2                                                                     
     
@@ -904,7 +937,7 @@ bool ART::generate_paired_reads_with_indel(ART& read_1, ART& read_2, int minFrag
     }
     read_1.read_maker(read1_template_seq, threadID);                                                    // Generate the read sequence by incorporating the indels into the template sequence of read 1
     read_2.read_maker(read2_template_seq, threadID);                                                    // Generate the read sequence by incorporating the indels into the template sequence of read 2
-
+   
     return true;                                                                                        // Return true if successful
 }
 //--------------------------------------------------------------------------------------------

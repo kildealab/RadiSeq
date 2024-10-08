@@ -1,6 +1,8 @@
 # RadiSeq
 
 This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. RadiSeq can perform both bulk- and single-cell whole genome DNA sequencing.
+<br>
+[![DOI](https://zenodo.org/badge/666482390.svg)](https://zenodo.org/doi/10.5281/zenodo.13371311)
 
 
 ## Table of Contents
@@ -50,10 +52,14 @@ Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation
 
 ### Getting started
 
-1. Download the latest version of RadiSeq
+1. Download the latest version of RadiSeq from the code repository (RadiSeq.tar.gz)
 2. Unzip the downloaded RadiSeq file
-3. Download the generic human reference genome [(click here to download)](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz)<br>
-   Unzip the downloaded file and save it in the 'radiSeqData' directory under the name `'Human_reference_genome.fa'`.
+   * `cd path/to/RadiSeq.tar.gz`
+   * `tar -xvzf RadiSeq.tar.gz`
+3. Download the generic human reference genome [(click here to download)](https://ftp.ensembl.org/pub/grch37/current/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz) (Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz)
+4. Unzip the downloaded file and save it in the 'radiSeqData' directory under the name `'Human_reference_genome.fa'`.
+   * `cd path/to/Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz`
+   * `gunzip -c Homo_sapiens.GRCh37.dna_rm.primary_assembly.fa.gz > path/to/RadiSeq/radiSeqData/Human_reference_genome.fa`
 5. Compile RadiSeq:
    * `cd path/to/RadiSeq`
    * `make`<br>
@@ -61,7 +67,7 @@ Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation
 6. Set up the environment variable 'RADISEQ_DATA_DIR'
    * `export RADISEQ_DATA_DIR=path/to/RadiSeq/radiSeqData`<br>
    You will need to do this step every time you open a fresh Terminal window. Alternatively, you may choose to add this into one of your statup files (eg: .bashrc) if you are comfortable doing so.<br>
-**Note**: Replace 'path/to/RadiSeq' in step 5 and 6 with the actual full path to the directory RadiSeq in your system
+**Note**: Replace 'path/to/RadiSeq' in step 4, 5 and 6 with the actual full path to the directory RadiSeq in your system
 
 ### Running a test
 Run the test sequencing to check if the RadiSeq is working fine. You can run the test using the command:<br> 
@@ -89,7 +95,6 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | merge_damages_from_multiple_particles | Flag to indicate if the user wishes to define a single genome by combining damages from multiple SDD files | 'True' or 'False' |
 | number_of_particles_to_merge | Number of SDD files from individual primary simulations to combine | Number (integer) |
 | primary_particles_simulated | Names of primary particles that introduced the damages that are going to be combined into a single genome | Comma-separated list of names  (strings) |
-| relative_dose_contributions | Relative dose contributions of each primary particle in order of the SDD files | Comma-separated list of numbers between 0 and 1 (double(s)) |
 | adjust_damages_with_actual_dose | Flag to indicate if the user wishes to scale the number of damages with the actual dose delivered and it is different from the expected dose | 'True' or 'False' |
 | actual_dose_delivered_data | Complete path to the file containing the actual dose delivered in each run. One file is expected for each SDD file specified | Comma-separated list of paths (string) |
 | reference_genome_FASTAfile | Complete path to the reference genome file | path to file (sting) |
@@ -128,7 +133,7 @@ of their choosing, as long as the contents of the file are formatted in a specif
 
 ### 1. Using multiple SDD files to combine damages from multiple radiation exposures
 If a single-cell MC model is irradiated under the same conditions, the damages from these repeated irradiations will be stored in a same SDD file with a single header section. When such an SDD file is provided as an input to RadiSeq, each of the repeated irradiation will generate a uniquely damaged single cell genome for sequencing. Therefore, if one wants more damaged cells to be sequenced, make sure the SDD file provided has as many irradiation simulations as needed. <br>
-If a single-cell MC model is irradiated with two different radiation qualities (say electron and proton for example) and there are two SDD files corresponding to the two exposures, each with say 100 damaged cell data, RadiSeq provides the option to combine the damages from both electron and proton in a cell using the input parameter flag 'merge_damages_from_multiple_particles'. Then user must also provide 'number_of_particles_to_merge' (it is 2 in this example), and optionally provide the names of these 'primary_particles_simulated' (electron and proton in this example), and their relative dose contributions as a comma seperated list (ex: 0.4,0.6). This will generate 100 damaged cell genomes with damages coming from electron irradiation and from proton irradiation each contributing 40% and 60% of the total dose to the cells respectively.  
+If a single-cell MC model is irradiated with two different radiation qualities (say electron and proton for example) and there are two SDD files corresponding to the two exposures, each with say 100 damaged cell data, RadiSeq provides the option to combine the damages from both electron and proton in a cell using the input parameter flag 'merge_damages_from_multiple_particles'. Then user must also provide 'number_of_particles_to_merge' (it is 2 in this example), and optionally provide the names of these 'primary_particles_simulated' (electron and proton in this example). This will generate 100 damaged cell genomes with damages coming from electron irradiation and from proton irradiation.  
 **Note**: If the number of repeated irradiations in the two SDD files are not the same, then RadiSeq will only merge the least common number of cell damage data in both SDD files.
 
 ### 2. Compensating for additional dosage in irradiation than desired

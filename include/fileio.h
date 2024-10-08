@@ -16,7 +16,7 @@ bool checkFolderExists(const char*);                                            
 void readParameterFile(const std::string*, NGSParameters& );                                            // function to read a parameter file. A pointer to a string (filename) is passed
 int countExposuresSDD(const std::string*, std::vector<std::streampos>&);                                // function to count the number of exposures in every SDD file and store the lines corresponding to new exposures 
 std::vector<double> readActualDosefile(const std::string*, int);                                        // function to read a file containing actual dose in each exposure/irradiation
-void readSDDfileHeader(const std::string*, NGSsdd&);                                                    // function to read an SDD file header and obtain values from fields 11 and 15 of the header
+void readSDDfileHeader(const std::string*, NGSsdd&, bool);                                              // function to read an SDD file header and obtain values from fields 11 and 15 of the header
 void readSDDfileData(const std::string*, NGSsdd&, int, int, std::vector<std::string>&, int);            // function to read an SDD file data
 std::pair<int, std::vector<double>> readFragmentSizeDist(const std::string*);
 char* createMemoryMappedFile(const std::string&, size_t);                                               // function to create a file with a memory-map and returns the pointer to the memory-map

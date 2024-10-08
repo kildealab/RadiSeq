@@ -8,7 +8,7 @@ class NGSsdd{
     int num_of_exposures;                                                            // Variable to hold the number of exposures in SDD. This will be the lowest value among all SDDs
     int num_of_damagedCells_toBuild;                                                 // Variable to hold the number of damaged cells we want to build from all the exposures in the SDD file. This value will be <= num of exposures
     std::vector<std::vector<double>> actual_dose_delivered;                          // Vector that holds vectors than contain actual dose delivered in each exposure for every SDD file
-    double expected_dose_gy;                                                         // Variable to hold the dose in Gy that was expected to be delivered in MC simulation
+    std::vector<double> expected_dose_gy;                                            // Vector to hold the dose in Gy that was expected to be delivered in each SDD file
     std::vector<long> chrom_size_bp;                                                 // Vector that holds the chromosome length in bp from the MC model
     std::vector<std::streampos> lines_read_sdd;                                      // This vector will hold the location in the SDD file where we last left off; for all SDDs
     std::vector<std::vector<std::streampos>> exposureLine_vec;                       // This vector will hold vectors that has the positions of new exposure data lines in each SDD files. 
@@ -45,7 +45,7 @@ public:
     const std::vector<std::vector<double>>* get_actual_dose_delivered();             // function to get 'actual_dose_delivered' vector
 
     void set_expected_dose_gy(std::string*);                                         // function to set expected dose in Gray value
-    double get_expected_dose_gy();                                                   // function to get expected dose in Gray
+    double get_expected_dose_gy(int);                                                // function to get expected dose in Gray
 
     void set_chrom_size_bp(std::string*);                                            // function to set the chromosone sizes in bp from SDD
     const std::vector<long>* get_chrom_size_bp();                                    // function to get 'chrom_size_bp' vector
@@ -76,7 +76,7 @@ public:
     
     void reset_temporary_damage_vecs(int);                                           // function to empty the temporary vectors after each SDD
     void reset_permanent_damage_vecs(int);                                           // function to empty the permanent vectors after each exposure
-    void adjust_damages_data(double, int, int, bool, int);                           // function to remove damages according to relative_dose_contribution and actual dose if needed
+    void adjust_damages_data(int, int, bool, int);                                   // function to remove damages according to the actual dose if needed
     
     //void find_DNA_breakPoints(int);                                                  // function to find DSBs and Chromosome ends to divide the genome into fragments
     //std::vector<long>& get_DNA_breakPoints();                                        // function to get the DNA break points for each cell in process at the moment

@@ -580,14 +580,15 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
                 
         // Processing the forward strand first 
         long A_segment_start{0};                                                                                // Temporary variale that wiil hold the starting location of each DNA segment in forward strand and update its value when a new segment is found
-        long A_segment_length;
+        long A_segment_length{0};
         int A_segment_index{1};                                                                                 // Temporary index variable to name each DNA segment in forward strand 
         if(k<strandbreakLoc1.size()){                                                                           // If there are unprocessed strand breaks present in the forward strand, then
             while(k<strandbreakLoc1.size()){
                 if(strandbreakLoc1[k]<=(seqStartIndex+seq_length)){                                             // If the strand break is within the chromosome that is being processed, then split sequencence into segments at each break point
-                    batch_buffer.push_back(chromID_A+"_segment_"+std::to_string(A_segment_index)+"\n");
                     A_segment_length = (strandbreakLoc1[k]-seqStartIndex) - A_segment_start;
+                    if(A_segment_length==0){k++; continue;}                                                     // If the break is at the same location as the chromosome discontinuity, then continue to the next break
                     std::string chrm_segment_seq = chromSeq_A.substr(A_segment_start, A_segment_length);        // substr(a,b): get b charcters starting from index a 
+                    batch_buffer.push_back(chromID_A+"_segment_"+std::to_string(A_segment_index)+"\n");
                     batch_buffer.push_back(chrm_segment_seq+"\n");
                     A_segment_start = strandbreakLoc1[k]-seqStartIndex;
                     A_segment_index++; k++;
@@ -610,9 +611,9 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
                             chrm_GC_bias.push_back(0.0);                                                        // Corresponds to the chromosome ID
                             chrm_GC_bias.push_back(GCBias::get_GCbias(chrm_GC_fraction));                       // Stores the GC bias into a vector for each chromosome segment
                         }
-                    }else{                                                                                      // If the strand break is not in chromosome, write without the segmenet tag
+                    }else{                                                                                      // If the strand break is not in chromosome, write without the segment tag
                         batch_buffer.push_back(chromID_A+"\n");    
-                        std::string substring = chromSeq_A.substr(A_segment_start);
+                        std::string substring = chromSeq_A;
                         batch_buffer.push_back(substring+"\n");
                         chrm_seg_weights.push_back(0.0);                                                        // Corresponds to the chromosome ID
                         chrm_seg_weights.push_back(static_cast<double>(substring.size())/total_seq_length);
@@ -637,17 +638,18 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
         }
         
         // Processing the reverse complementary strand next 
-        long B_segment_end{seq_length};                                                                         // Temporary variable holding the end location of each segment in reverse strand
-        long B_segment_length;
-        int B_segment_index{1};                                                                                 // Temporary index variable to name each DNA segment of reverse strand
+        long B_segment_start{0};                                                                                // Temporary variale that wiil hold the starting location of each DNA segment in forward strand and update its value when a new segment is found
+        long B_segment_length{0};
+        int B_segment_index{1};                                                                                 // Temporary index variable to name each DNA segment in forward strand 
         if(l<strandbreakLoc2.size()){                                                                           // If there are unprocessed strand breaks present in reverse strand, then
             while(l<strandbreakLoc2.size()){                                                            
                 if(strandbreakLoc2[l]<=(seqStartIndex+seq_length)){                                             // If the strand break is within the chromosome that is being processed, then split sequencence into segments at each break point
+                    B_segment_length = (strandbreakLoc2[l]-seqStartIndex) - B_segment_start;
+                    if(B_segment_length==0){l++; continue;}                                                     // If the break is at the same location as the chromosome discontinuity, then continue to the next break
+                    std::string chrm_segment_seq = chromSeq_B.substr(B_segment_start, B_segment_length);        // substr(a,b): get b charcters starting from index a 
                     batch_buffer.push_back(chromID_B+"_segment_"+std::to_string(B_segment_index)+"\n");
-                    B_segment_length = B_segment_end - (seq_length-(strandbreakLoc2[l]-seqStartIndex));
-                    std::string chrm_segment_seq = chromSeq_B.substr((seq_length-(strandbreakLoc2[l]-seqStartIndex)),B_segment_length);
                     batch_buffer.push_back(chrm_segment_seq+"\n");
-                    B_segment_end = seq_length-(strandbreakLoc2[l]-seqStartIndex);                            
+                    B_segment_start = strandbreakLoc2[l]-seqStartIndex;                           
                     B_segment_index++; l++;
                     chrm_seg_weights.push_back(0.0);                                                            // Corresponds to the chromosome ID
                     chrm_seg_weights.push_back(static_cast<double>(B_segment_length)/total_seq_length);            
@@ -659,7 +661,7 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
                 }else{                                                                                          // If strand break is not in the chromosome Or if it is the final segment in a chromosome
                     if(B_segment_index!=1){                                                                     // if it is the last segment, write ID with segment tag
                         batch_buffer.push_back(chromID_B+"_segment_"+std::to_string(B_segment_index)+"\n");
-                        std::string substring = chromSeq_B.substr(0,B_segment_end);
+                        std::string substring = chromSeq_B.substr(B_segment_start);
                         batch_buffer.push_back(substring+"\n");
                         chrm_seg_weights.push_back(0.0);                                                        // Corresponds to the chromosome ID
                         chrm_seg_weights.push_back(static_cast<double>(substring.size())/total_seq_length);            
@@ -670,7 +672,7 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
                         }
                     }else{                                                                                      // If the strand break is not in chromosome, write without the segmenet tag
                         batch_buffer.push_back(chromID_B+"\n");
-                        std::string substring = chromSeq_B.substr(0,B_segment_end);
+                        std::string substring = chromSeq_B;
                         batch_buffer.push_back(substring+"\n");
                         chrm_seg_weights.push_back(0.0);                                                        // Corresponds to the chromosome ID
                         chrm_seg_weights.push_back(static_cast<double>(substring.size())/total_seq_length);            
@@ -748,7 +750,7 @@ std::vector<double> buildDamagedCellGenome_from_MM(NGSsdd& SDDdata, const std::s
     if(!chrm_GC_bias.empty()){                                                                                  // Modify chromosome segment weights if there is GC bias also to be considered
         double total_chrm_weight{0};                                                                            // A temporary variable to hold the total weight from each chrm weight for normalization 
         for (size_t i = 0; i<chrm_seg_weights.size(); ++i){
-            chrm_seg_weights[i] *= chrm_GC_bias[i];                                                             // Length weight * GC bias weight
+            chrm_seg_weights[i] *= (1+chrm_GC_bias[i]);                                                         // Length weight * GC bias weight in ragne [1,2]. GC bias is changed into this range to avoid total bias being 0 when GC bias is 0.
             total_chrm_weight += chrm_seg_weights[i];                                                           // Sum up all the individual chrm weights for normalization
         }
 

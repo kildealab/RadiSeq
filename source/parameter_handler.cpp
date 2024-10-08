@@ -77,9 +77,6 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "primary_particles_simulated"){
         set_names_of_particles_to_merge(paramValue);
     } 
-    else if (*paramName == "relative_dose_contributions"){
-        set_relative_dose_contributions(paramValue);
-    } 
     else if (*paramName == "sddFilePath"){
         set_sddfile_path(paramValue);
     }
@@ -217,9 +214,6 @@ void NGSParameters::set_num_of_particles_to_merge(std::string* paramValue){
 }
 void NGSParameters::set_names_of_particles_to_merge(std::string* paramValue){
     stringToVec(',', paramValue, names_of_particles_to_merge);                                // Converting comma seperated list of names to a vector
-}
-void NGSParameters::set_relative_dose_contributions(std::string* paramValue){
-    stringToVec(',', paramValue, relative_dose_contributions);                                // Registering comma seperated double values as a vector
 }
 void NGSParameters::set_sddfile_path(std::string* paramValue){
     stringToVec(',', paramValue, sddfile_path);                                               // Registering comma seperated SDD paths to a vector
@@ -451,9 +445,6 @@ int NGSParameters::get_num_of_particles_to_merge(){
 const std::vector<std::string>* NGSParameters::get_names_of_particles_to_merge(){
     return(&names_of_particles_to_merge);
 }
-std::vector<double>&  NGSParameters::get_relative_dose_contributions(){
-    return(relative_dose_contributions);
-}
 std::vector<std::string>& NGSParameters::get_sddfile_path(){
     return(sddfile_path);
 }
@@ -590,10 +581,6 @@ void NGSParameters::help_parameter(std::string* paramName){
         std::cerr<<" Comma seperated list of names of primary particles (strings) that introduced  "
         <<"the damages that are going to be combined into a single genome.\n Specify one name, if there is only one primary (optional)\n";
     }
-    else if (*paramName == "relative_dose_contributions"){
-        std::cerr<<" Comma seperated list of relative dose contributions (floats) for each primary particle in order. \n"
-        <<" Same order should be kept when specifying respective SDD files. Sum of these values should be 1. \n";
-    }
     else if (*paramName == "sddFilePath"){
         std::cerr<<" You MUST specify the path to the SDD file. If you wish to combine damages from multiple SDD file into a single genome, \n"
         <<" then provide a comma seperated list of paths, in the same order in which their relative_dose_contributions are specified \n";
@@ -664,8 +651,8 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "fragment_size_distribution_path"){
         std::cerr<<" Specify the path to the file containing the DNA fragment size distribution\n"
         <<" Each row in this file is expected to be space-seperated value pairs corresponding to the DNA fragment size and the normalized count of that fragment respectively\n"
-        <<" Alternatively, the DNA fragment size distribution can be described using a beta function parameters. However, if this parameter is set, \n"
-        <<" then the function will be overriden with the provided distribution.\n";
+        <<" Alternatively, the DNA fragment size distribution can be described using a beta function parameters. However, if fragment_size_distribution_path is set, \n"
+        <<" then the beta function will be overriden with the provided fragment size distribution.\n";
     }
     else if (*paramName == "DNA_fragment_length"){
         std::cerr<<" Specify the minimum and maximum lengths of DNA fragments (in bp) obtained after size selection. This is different from the read length. \n"
@@ -722,22 +709,6 @@ void NGSParameters::success_parameter(){
             temp_str= "sddFilePath"; help_parameter(&temp_str);                                 // Print help for SDD file path parameter
             exit(EXIT_FAILURE);
         }
-        //check if an appropriate number of relative dose contributions are provided, if yes, check if their sum is 1
-        if (reqSize != (get_relative_dose_contributions()).size()){                             // Exit with an error if number rel_dose_contributions given not matches with reqired number
-            std::cerr<<"\n ERROR: Mismatch between the number of particles to merge("<<reqSize<<") and the number of relative contibutions provided("<<(get_relative_dose_contributions()).size()<<")"<<'\n';
-            temp_str= "relative_dose_contributions"; help_parameter(&temp_str);                 // Print help for relative_dose_contributions parameter
-            exit(EXIT_FAILURE);
-        }else{
-            double total_rel_dose{0};                                                           // Temporary variable to hold the total relative dose contribution
-            for (size_t i=0;i<reqSize;i++){
-                total_rel_dose += (get_relative_dose_contributions())[i];                       // Calculate the total relative dose contribution given
-            }
-            if (total_rel_dose != 1.0){                                                         // If total relative dose is not equal to 1, print error and exit
-                std::cerr<<"\n ERROR: The sum of all relative dose contributions should be equal to 1 \n";
-                temp_str= "relative_dose_contributions"; help_parameter(&temp_str);             // Print help for relative_dose_contributions parameter
-                exit(EXIT_FAILURE);
-            }  
-        }
     }else{
         //If there are more than one SDD file path given, but the merge damage flag is off:
         if ((get_sddfile_path()).size()>1){
@@ -745,13 +716,6 @@ void NGSParameters::success_parameter(){
             <<" If you wish to merge damages from multiple SDD files, specify using \'merge_damages_from_multiple_particles parameter\'\n";
             exit(EXIT_FAILURE);
         }
-        // If there are more than one relative dose contribution values given, but the merge damage flag is off:
-        if ((get_relative_dose_contributions()).size()>1){
-            std::string reset_rel_dose ="1";
-            set_relative_dose_contributions(&reset_rel_dose);
-            std::cerr<<"\n WARNING: More than 1 relative dose contribution values are provided for a single SDD file\n"
-            <<"  ----- Re-setting \"relative_dose_contributions\" to 1 ----- \n";
-        } 
     }
 
     // User MUST provide a valid path(s) to SDD file(s). If not, exit with error

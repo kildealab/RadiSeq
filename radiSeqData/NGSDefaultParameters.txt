@@ -9,8 +9,6 @@ number_of_particles_to_merge                = 1                       # Number o
 primary_particles_simulated                 = Unspecified             # Comma seperated list of names of primary particle (strings) that introduced 
                                                                       # the damages that are going to be combined into a single genome
 
-relative_dose_contributions                 = 1                       # Comma seperated list of relative dose contributions (floats) for each particle in order
-
 sddFilePath                                 = ""                      # Path to the SDD file(s). Provide individual paths if more than 1 SDD
 
 adjust_damages_with_actual_dose             = False                   # "True" if the user wishes to scale the number of damages with the actual dose

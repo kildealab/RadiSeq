@@ -65,9 +65,10 @@ void readParameterFile(const std::string* paramfile, NGSParameters& parameter){
         if (!line.empty()){
 
             // Find the first '#' character in a line and ignore everything after '#' 
-            line = line.substr(0, line.find_first_of('#'));
+            line = line.substr(0, line.find_first_of('#'));                                              // line data upto # or to the end of line if no # present
 
             // Seperate ParameterName and Value from each line
+            if (line.find('=') == std::string::npos){continue;}                                          // If '=' sign is not in the line, skip to the next line
             std::string data_before_equalSign{line.substr(0,line.find("="))};                            // line data upto '=' from the start of the line
             std::string data_after_equalSign{line.substr(line.find("=")+1)};                             // line data after '=' to the end of the line
 
@@ -180,7 +181,7 @@ std::vector<double> readActualDosefile(const std::string* dosefile, int lineCoun
 //------------------------------------------------------------------------------------------------------------------------
 // A function to read any file that is formatted like an SDD file and get specific header fields 
 //------------------------------------------------------------------------------------------------------------------------
-void readSDDfileHeader(const std::string* sddfile, NGSsdd& SDDdata){
+void readSDDfileHeader(const std::string* sddfile, NGSsdd& SDDdata, bool readFullHeader){
     if(!checkFileExists(sddfile)){
         std::cerr<<"\n ERROR: The SDD file provided: "<<*sddfile<<" is invalid\n";
         exit(EXIT_FAILURE);
@@ -193,6 +194,7 @@ void readSDDfileHeader(const std::string* sddfile, NGSsdd& SDDdata){
             if(line[0]!='*'){                                                                             // End of the header line starts with '*' character
                 if(line.find("Dose or fluence")==0){                                                      // Field 11 of the SDD header
                     SDDdata.set_expected_dose_gy(&line); 
+                    if(!readFullHeader){break;}                                                           // A flag to check of the rest of the header is also needed 
                 }else if(line.find("Chromosome sizes")==0){                                               // Field 15 of the SDD header
                     SDDdata.set_chrom_size_bp(&line);
                     SDDdata.set_cell_ploidy_and_chrom_mappping(&line);
@@ -236,6 +238,7 @@ void readSDDfileData(const std::string* sddfile, NGSsdd& SDDdata, int SDDfilenum
         {
             int nWorkThreads = omp_get_num_threads();
             SDDdata.reset_workThread_data_holders(groupTID);                                              // Reset all sub-group thread data holding parameters
+            SDDdata.reset_temporary_damage_vecs(groupTID);                                                // Reset remaining sub-group thread data holding parameters
             SDDdata.init_set_workThread_data_holders(groupTID, nWorkThreads);                             // Resize all sub-group thread data holding vectors
         }
         #pragma omp barrier
@@ -473,7 +476,7 @@ int getNextChromSeq(std::ifstream& ref_seq, std::string& chrom_seq, std::string&
 // the chromosome sequence. By calling this function in a loop, we can get all the chromosome seqs one-by-one
 //------------------------------------------------------------------------------------------------------------------------
 int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position, std::string& chrom_seq, std::string& chromSeq_ID){
-    chrom_seq.clear();                                                                                    // Clear the previously stored value if any
+/*     chrom_seq.clear();                                                                                    // Clear the previously stored value if any
     chromSeq_ID.clear();                                                                                  // Clear the previously stored value of sequence ID if any
     std::ostringstream tmpStringBuffer;                                                                   // Temporary Buffer string to store sequence strings to be combined
     int success_flag = 0;                                                                                 // This will return 0 if no more sequences are left to read
@@ -482,7 +485,7 @@ int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position,
         return 0;  
     }
 
-    while (refSeqData[position] != '>' && refSeqData[position] != '\0'){
+    while (position < refSize && refSeqData[position] != '>' && refSeqData[position] != '\0'){
         position ++;
     }
 
@@ -499,10 +502,8 @@ int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position,
         while (position < refSize && refSeqData[position] != '>'){
             if (!(std::isspace(refSeqData[position]) || refSeqData[position] == '\n' || refSeqData[position] == '\r' || refSeqData[position] == '\t')){
                 chrom_seq += refSeqData[position];
-                position++;                                                                               // Move to the next character
-            } else{ 
-                 position++;                                                                              // Skip whitespace and escape characters
             }
+            position++;                                                                                   // Move to the next character
         }
         success_flag++;
     }
@@ -512,6 +513,57 @@ int getNextChromSeq_MM(const char* refSeqData, size_t refSize, size_t& position,
     }
 
     return success_flag;                                                                                  // Return 0 if either reached the end or if no sequence found
+} */
+    while (position < refSize){
+        chrom_seq.clear(); // Clear the previously stored value if any
+        chromSeq_ID.clear(); // Clear the previously stored value of sequence ID if any
+        int success_flag = 0; // This will return 0 if no more sequences are left to read
+
+        if (position >= refSize) { // If we've reached the end of the memory-mapped data, return 0.
+            return 0;
+        }
+
+        // Move to the next '>' character, indicating the start of the next chromosome ID
+        while (position < refSize && refSeqData[position] != '>' && refSeqData[position] != '\0') {
+            position++;
+        }
+
+        if (position >= refSize) { // Check again for the end of the data after moving the position
+            return 0;
+        }
+
+        if (refSeqData[position] == '>') { // If the character is '>', it is the start of the chrom ID
+            size_t end = position; // A variable to hold the end position of the chrom ID
+            while (end < refSize && refSeqData[end] != '\n') { // Find the end of the chrom ID line
+                end++;
+            }
+            chromSeq_ID = std::string(&refSeqData[position], end - position); // Extract chrom ID
+            chromSeq_ID.erase(chromSeq_ID.find_last_not_of(" \n\r\t") + 1); // Trim whitespaces at the end
+            position = end + 1; // Move the position to the next line after the header
+
+            // Get the strand sequence, skipping whitespace and invalid characters
+            while (position < refSize && refSeqData[position] != '>') {
+                if (!(std::isspace(refSeqData[position]) || refSeqData[position] == '\n' ||
+                      refSeqData[position] == '\r' || refSeqData[position] == '\t' || refSeqData[position] == '\0')) {
+                    chrom_seq += refSeqData[position]; // Append valid characters to the sequence
+                }
+                position++; // Move to the next character
+            }
+
+            // If the sequence is empty (e.g., consecutive '>' headers), continue to the next sequence
+            if (chrom_seq.empty()) {
+                continue; // Skip to the next loop iteration to process the next chromosome sequence
+            }
+
+            success_flag++; // Successfully processed a chromosome ID and sequence
+        }
+
+        if (success_flag) {
+            return success_flag; // Return if a valid sequence was found
+        }
+    }
+
+    return 0; // Return 0 if no valid sequences are left to read
 }
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -873,20 +925,20 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
                 report_file<<(*particle_names)[i];
             }
         }
-        report_file<<"\n The relative dose contributions of these particles                   : ";
+        report_file<<"\n The dose contributions of these particles                            : ";
+        double totalDose{0};
         for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
             if(i!=0) report_file<<", ";
-            if(i>static_cast<int>(parameter.get_relative_dose_contributions().size())-1) report_file<<"0";
-            else{
-                report_file<<parameter.get_relative_dose_contributions()[i];
-            }
-        }    
+            report_file<<SDDdata.get_expected_dose_gy(i)<<" Gy";
+            totalDose+=SDDdata.get_expected_dose_gy(i);
+        }
+        report_file<<" (Total of "<<totalDose<<" Gy)\n";    
     }else{
         report_file<<" Name of the SDD file provided                                        : "<<parameter.get_sddfile_path()[0]<<"\n";
         const std::vector<std::string>* particle_names = parameter.get_names_of_particles_to_merge();
-        report_file<<" Name of the primary particle used for the irradiation                : "<<(*particle_names)[0];              
+        report_file<<" Name of the primary particle used for the irradiation                : "<<(*particle_names)[0];    
+        report_file<<"\n The dose delivered to a single cell during the irradiation           : "<<SDDdata.get_expected_dose_gy(0)<<" Gy\n";
     }
-    report_file<<"\n The dose delivered to a single cell during the irradiation           : "<<SDDdata.get_expected_dose_gy()<<" Gy\n";
     if(parameter.get_adjust_damages_with_actual_dose()){
         report_file<<" Are the radiation-induced damages adjusted for actual delivered dose : Yes \n"
                    <<" Number of damages are adjusted for delivered dose using the files    : ";

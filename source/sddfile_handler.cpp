@@ -23,15 +23,17 @@ void NGSsdd::process_sddfile(NGSsdd& SDDdata, NGSParameters& parameter){
     set_num_of_SDDs(sdd_paths.size());                                                                  // number of SDD files passed
     std::vector<int> exposure_count_vector;                                                             // vector to hold number of exposures from all SDDs
     exposureLine_vec.resize(get_num_of_SDDs());                                                         // vector to hold vectors of line numbers that corresponds to new exposures. It will store one vector for every SDD file
-
+    
     for (int i=0; i<get_num_of_SDDs(); i++){
+        bool readFullHeader = (i == 0);                                                                 // True for the first iteration only
+        readSDDfileHeader(&sdd_paths[i], SDDdata, readFullHeader);                                      // full header will be read only for the first SDD file, otherwise only the dose is read
         exposure_count_vector.push_back(countExposuresSDD(&sdd_paths[i], exposureLine_vec[i]));         // count exposure in each SDD one by one and also store the line numbers of each new exposure
     }
     set_num_of_exposures(*std::min_element(exposure_count_vector.begin(), exposure_count_vector.end()));// find the least (common) number of exposures in all SDD(s) to merge 
     // If there are unequal number of exposure data entries (runs) in SDDs that there is to combine, print warning
     if(!(std::adjacent_find(exposure_count_vector.begin(), exposure_count_vector.end(), std::not_equal_to<int>()) == exposure_count_vector.end())){
         std::cerr<<"\n WARNING: The number of exposures in multiple SDD files you have provided to merge damages are not the same.\n"
-        <<" This simulator will only merge exposures that are present in all SDD files and ignore the rest of the data.\n"
+        <<" RadiSeq will only merge exposures that are present in all SDD files and ignore the rest of the data.\n"
         <<" ---- Found "<<get_num_of_exposures()<<" exposure data to merge from SDDs ----- \n";
     }
     if(parameter.get_num_of_cells_to_sequence()<get_num_of_exposures()){                                // Check if the number of cells we want to sequence is less than the number of cells we have in the SDD file
@@ -46,7 +48,6 @@ void NGSsdd::process_sddfile(NGSsdd& SDDdata, NGSParameters& parameter){
             actual_dose_delivered.push_back(readActualDosefile(&actualdose_paths[i], get_num_of_exposures()));
         }
     }
-    readSDDfileHeader(&sdd_paths[0], SDDdata);                                                          // header will be read only for the first SDD file, assuming all headers are same
     lines_read_sdd.resize(get_num_of_SDDs());                                                           // one value each for every SDD 
     for (size_t i = 0; i < lines_read_sdd.size(); i++){                                                 // initiating the vector with empty values
         lines_read_sdd[i] = std::streampos(std::streamoff(0));                                          // streamoff(0) is setting the position to be at the beginning of the stream
@@ -72,7 +73,7 @@ void NGSsdd::set_num_of_damagedCells_toBuild(int sddValue){
 void NGSsdd::set_expected_dose_gy(std::string* sddField){
     std::vector<std::string> temp_vec;                                                                  // Temporary vector to hold stringToVec function return
     stringToVec(',', sddField, temp_vec);                                                               // Converts comma-seperated sddField to temp_vec
-    expected_dose_gy = std::stold(temp_vec[1]);                                                         // Obtain the dose value and convert string to double
+    expected_dose_gy.push_back(std::stold(temp_vec[1]));                                                // Obtain the dose value and convert string to double
 }
 void NGSsdd::set_chrom_size_bp(std::string* sddField){
     std::vector<std::string> temp_vec;
@@ -108,16 +109,37 @@ void NGSsdd::set_lines_read_sdd(std::streampos sddPos, int sddfilenumber){
     lines_read_sdd[sddfilenumber] = sddPos;                                                             // Update the position in SDD file
 }
 void NGSsdd::init_set_data_holders(int nGroupThreads){
+    original_num_damages.clear();
     original_num_damages.resize(nGroupThreads);
+    
+    damage_start_loc_vec.clear();
     damage_start_loc_vec.resize(nGroupThreads);
+    
+    chrom_ID_vec.clear();
     chrom_ID_vec.resize(nGroupThreads);
+    
+    temp_backbone1_breaks_vec.clear();
     temp_backbone1_breaks_vec.resize(nGroupThreads);
+    
+    temp_backbone2_breaks_vec.clear();
     temp_backbone2_breaks_vec.resize(nGroupThreads);
+    
+    temp_basestrand1_damages_vec.clear();
     temp_basestrand1_damages_vec.resize(nGroupThreads);
+    
+    temp_basestrand2_damages_vec.clear();
     temp_basestrand2_damages_vec.resize(nGroupThreads);
+    
+    backbone1_break_loc_vec.clear();
     backbone1_break_loc_vec.resize(nGroupThreads);
+    
+    backbone2_break_loc_vec.clear();
     backbone2_break_loc_vec.resize(nGroupThreads);
+    
+    basestrand1_damage_loc_vec.clear();
     basestrand1_damage_loc_vec.resize(nGroupThreads);
+    
+    basestrand2_damage_loc_vec.clear();
     basestrand2_damage_loc_vec.resize(nGroupThreads);
 }
 void NGSsdd::init_set_workThread_data_holders(int groupTID, int nWorkerThreads){
@@ -197,8 +219,8 @@ int NGSsdd::get_num_of_damagedCells_toBuild(){
 const std::vector<std::vector<double>>* NGSsdd::get_actual_dose_delivered(){
     return(&actual_dose_delivered);
 }
-double NGSsdd::get_expected_dose_gy(){
-    return(expected_dose_gy);
+double NGSsdd::get_expected_dose_gy(int sdd_index){
+    return(expected_dose_gy[sdd_index]);
 }
 const std::vector<long>* NGSsdd::get_chrom_size_bp(){
     return(&chrom_size_bp);
@@ -321,21 +343,19 @@ void NGSsdd::merge_workerThread_vectors(int groupTID){
 
 //--------------------------------------------------------------------------------------------
 // This function will determine how many damages should be removed from the total number of 
-// damages obtained in one exposure data of 1 SDD, using relative_dose_contributions and the
-// actual dose delivered, if needed. Then this function will also remove that many damages
-// randomly from the temporary vector holding the damage locations before pushing back the
-// data to the final damage location vectors. Final damages vectors will also be sorted.
+// damages obtained in one exposure data of 1 SDD, using the actual dose delivered, if needed. 
+// Then this function will also remove that many damages randomly from the temporary vector 
+// holding the damage locations before pushing back the data to the final damage location vectors. 
+// Final damages vectors will also be sorted.
 //--------------------------------------------------------------------------------------------
-void NGSsdd::adjust_damages_data(double rel_dose, int exposure_index, int sdd_index, bool adjust_dose_flag, int groupTID){
+void NGSsdd::adjust_damages_data(int exposure_index, int sdd_index, bool adjust_dose_flag, int groupTID){
     int num_damages_to_remove{0};                                                                       // temporary counter variable
     
     // If adjust_damage_with_actula_dose flag is ON
     if(adjust_dose_flag){
         const std::vector<std::vector<double>>& actual_dose = *get_actual_dose_delivered();
-        num_damages_to_remove = std::round(get_original_num_damages(groupTID)*(1 - ((get_expected_dose_gy()*rel_dose)/(actual_dose[sdd_index][exposure_index]))));
-        // damages to remove = total damages(1-(X/actual dose)); where X = expected dose * relative dose contribution
-    }else{
-        num_damages_to_remove = std::round(get_original_num_damages(groupTID)*(1 - rel_dose));          // works with both when merge_damage flag is ON or OFF
+        num_damages_to_remove = std::round(get_original_num_damages(groupTID)*(1 - (get_expected_dose_gy(sdd_index)/(actual_dose[sdd_index][exposure_index]))));
+        // damages to remove = total damages(1-(expected dose/actual dose));
     }
 
     while(num_damages_to_remove>0){

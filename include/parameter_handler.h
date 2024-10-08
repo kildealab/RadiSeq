@@ -16,7 +16,6 @@ class NGSParameters{
     bool is_merge_damages{false};                                                // Assigns 1 if parameter value is "True" or "true". Else 0. If damages from different SDD to be merged
     int num_particles_to_merge;                                                  // Intiger value indicating the number of particle-simulations to merge
     std::vector<std::string> names_of_particles_to_merge;                        // Vector to hold the list of particles for which 'is_merge_damages' applicable
-    std::vector<double> relative_dose_contributions;                             // Vector to hold the relative dose contribution from each particle
     std::vector<std::string> sddfile_path;                                       // Vector to hold the paths to SDD files from different particles to construct a genome
     bool is_adjust_dose{false};                                                  // If damages needs to be adjusted with actual dose delivered
     std::vector<std::string> actual_dosefile_path;                               // Vector to hold the paths to files containing actual dose deposited in each run by each particle
@@ -80,9 +79,6 @@ public:
 
     void set_names_of_particles_to_merge(std::string*);                          // function to set 'names_of_particles_to_merge' 
     const std::vector<std::string>* get_names_of_particles_to_merge();           // function to get 'names_of_particles_to_merge'
-
-    void set_relative_dose_contributions(std::string*);                          // function to set 'relative_dose_contributions'
-    std::vector<double>& get_relative_dose_contributions();                      // function to get 'relative_dose_contributions'
 
     void set_sddfile_path(std::string*);                                         // function to set 'sddfile_path'
     std::vector<std::string>& get_sddfile_path();                                // function to get 'sddfile_path'

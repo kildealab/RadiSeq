@@ -9,20 +9,18 @@ number_of_particles_to_merge                = 2                         # Number
 primary_particles_simulated                 = electron                # Comma seperated list of names of primary particle (strings) that introduced 
                                                                 # the damages that are going to be combined into a single genome
 
-relative_dose_contributions                 = 0.5,0.5                         # Comma seperated list of relative dose contributions (floats) for each in order
-
-sddFilePath                                 =  ./example_test/test_sdd.txt, ./example_test/test_sdd2.txt      # Path to the SDD file(s)
+sddFilePath                                 =  ./test_sdd.txt, ./test_sdd2.txt      # Path to the SDD file(s)
 
 adjust_damages_with_actual_dose             = true                 # "True" if the user wishes to scale the number of damages with the actual dose
                                                                       # delivered and it is different from expected dose.
 
-actual_dose_delivered_data                  = ./example_test/test_actualDose.txt,    ./example_test/test_actualDose2.txt                 # Path to the file containing actual dose delivered in each run
+actual_dose_delivered_data                  = ./test_actualDose.txt,    ./test_actualDose2.txt                 # Path to the file containing actual dose delivered in each run
 
 random_seed                                 = 1234                     # Specify a random seed if you wish to provide a fixed seed to RNG. Else default. 0 is also default
 
-reference_genome_FASTAfile                  = ./example_test/test_fasta.fa                    # Path to the reference genome file if user wants to specify one. Else default
+reference_genome_FASTAfile                  = ./test_fasta.fa                    # Path to the reference genome file if user wants to specify one. Else default
 
-output_directory_path                       = ./example_test/output                # Path to the directory where the output fastq files should be stored
+output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
 illumina_sequencer                          = test               # Name of the Illumina sequencer to be used for sequencing. Only the following names
                                                                       # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
