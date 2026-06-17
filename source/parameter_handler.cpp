@@ -179,6 +179,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "make_summary_report"){
         set_summary_report(paramName, paramValue);
     }
+    else if (*paramName == "compress_output"){
+        set_compress_output(paramName, paramValue);
+    }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
         <<" ----- This parameter will be ignored -----\n";
@@ -423,6 +426,14 @@ void NGSParameters::set_summary_report(std::string* paramName, std::string* para
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"True\" -----\n";
     }
 }
+void NGSParameters::set_compress_output(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_compress_output = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_compress_output()<<"\" -----\n";
+    }
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -559,6 +570,9 @@ const std::string* NGSParameters::get_output_fastq_filename_prefix(){
 bool NGSParameters::get_summary_report(){
     return(is_summary_report);
 }
+bool NGSParameters::get_compress_output(){
+    return(is_compress_output);
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -685,6 +699,10 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "make_summary_report"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to generate a summary report at the end of the run \n";
+    }
+    else if (*paramName == "compress_output"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not you wish to compress the output FASTQ files (gzip) \n";
     }
 }
 //--------------------------------------------------------------------------------------------

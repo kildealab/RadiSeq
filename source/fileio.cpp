@@ -593,6 +593,19 @@ void writeBatchToFile(std::vector<std::string>& batch_buffer, std::ofstream& out
     }
     batch_buffer.clear();                                                                                 // Clear the buffer after writing it to file
 }
+
+std::string getCompressedBatch(std::vector<std::string>& batch_buffer) {
+    std::ostringstream originalData;                                                                  // Temporary object to hold the string data
+    for (const std::string& line : batch_buffer){                                                     // Parsing through the batch_buffer
+        if (!line.empty()){                                                                           // Skip empty lines if any 
+            originalData << line;                                                                     // Store each line to the temporary stringstream object
+        }
+    }
+    std::string compressedData;                                                                       // Temporary string to hold the compressed string data
+    compressStringData(originalData.str(), compressedData);
+    batch_buffer.clear();  
+    return compressedData;
+}
 //------------------------------------------------------------------------------------------------------------------------
 
 
@@ -828,7 +841,7 @@ int readFastaMemoryMap(const char* genomeTemplate_data, size_t templateSize, siz
 // This function will only consider quality scores with identifier '.' in this program. Need modifications if base-specific
 // score to be considered.
 //------------------------------------------------------------------------------------------------------------------------
-void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std::map<unsigned int, unsigned short>>& quality_distribution_vec){
+void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std::map<float, unsigned short>>& quality_distribution_vec){
     quality_distribution_vec.clear();                                                                     // Clear any previously stored values
     char quality_identifier;                                                                              // Variable to hold the quality identifier character
     int read_pos;                                                                                         // Variable to store the read position for which the score is accociated
@@ -860,16 +873,16 @@ void make_quality_distribution(std::ifstream& read_quality_file, std::vector<std
         unsigned long frequency;                                                                          // Individual cumulative frequency value
         std::vector<unsigned long> cumulative_frequency;                                                  // Vector to hold all the cumulative frequencies
         while (lineString >> frequency){  
-            cumulative_frequency.push_back(frequency); 
+            cumulative_frequency.push_back(frequency);      
         }
 
         unsigned long max_cum_freq = cumulative_frequency[cumulative_frequency.size()-1];                 // Total cumulative frequency to be used for normalization later
-        std::map<unsigned int, unsigned short> distribution;                                                
+        std::map<float, unsigned short> distribution;                                                
 
         for(size_t i=0; i<cumulative_frequency.size(); i++){
-            long double normalized_value = static_cast<long double>(cumulative_frequency[i])/max_cum_freq;// Normalize between 0 and 1
-            unsigned int cc = static_cast<unsigned int>(ceil(normalized_value*10000000.0))+1;             // Scale to the range 0-10000000, then add 1 to shift the range to 1-10000001
-            distribution[cc] = quality_score[i];
+            float normalized_value = static_cast<float>(cumulative_frequency[i])/max_cum_freq;// Normalize between 0 and 1
+            // unsigned int cc = static_cast<unsigned int>(ceil(normalized_value*10000000.0))+1;             // Scale to the range 0-10000000, then add 1 to shift the range to 1-10000001
+            distribution[normalized_value] = quality_score[i];
         }
         if(distribution.size()>0){
             quality_distribution_vec.push_back(distribution);

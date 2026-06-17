@@ -9,8 +9,8 @@
 class ART{
     static std::vector<double> read_pair_orientation_dist;                                              // Static vector that stores the fraction of read pair orientation for paired end sequencing
     static std::vector<double> read_artifacts_rate_dist;                                                // Static vector that stores the rate of read artifacts and no artifacts
-    static std::vector<std::map<unsigned int, unsigned short>> read1_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 1 
-    static std::vector<std::map<unsigned int, unsigned short>> read2_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 2
+    static std::vector<std::map<float, unsigned short>> read1_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 1 
+    static std::vector<std::map<float, unsigned short>> read2_quality_distribution_vec;          // Static vector to hold the quality score distribution map of read 2
     static double baseCall_error_probability[80];                                                       // Static array to store the 80 values of base calling error probabilities
     static int read_length;                                                                             // Variable to hold the read_length. Static variable will be accessible by all class objects created
     static std::string* chromSegSeq;                                                                    // Variable to hold the chromosome segment sequence currently being processed

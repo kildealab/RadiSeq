@@ -53,8 +53,21 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
         void* fastaFileMM = generateInputFileMemoryMap(cell_fasta_filename, fastaFileSize);             // Create the memory-map of the fasta file
         const char* cell_fastaFileData = static_cast<char*>(fastaFileMM);                               // Casting the memory-map void pointer to a const char pointer for further processing
 
-        std::string output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R1.fastq.gz";
-        std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                 // ofstream object of the output fastq file for read 1
+        // ofstream object of the output fastq file for read 1
+        std::string output_file_ending;
+        std::string output_fastq_R1_filename;
+        std::ofstream fastq_R1_file;
+        if (parameter.get_compress_output()) {
+            output_file_ending = ".fastq.gz";
+            output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R1" + output_file_ending;    
+            fastq_R1_file.open(output_fastq_R1_filename.c_str(),std::ios::binary);
+        } else {
+            output_file_ending = ".fastq";
+            output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R1" + output_file_ending;
+            fastq_R1_file.open(output_fastq_R1_filename.c_str());
+        }
+        
+                         
         
         ART read1;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
         read1.set_read_error_rates(parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
@@ -128,6 +141,23 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                                         writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
                                     }
                                 }
+                                if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
+                                        if (parameter.get_compress_output()) {
+                                            // compression can be done in paralell, since there is no shared memory. 
+                                            std::string compressed_batch = getCompressedBatch(batch_buffer[threadID]);
+                                            // writing can only be done by one thread at a time. 
+                                            // writeBatchToFile with compression = true is not used so that compression and writing can be done in separate blocks
+                                            #pragma omp critical(section1)
+                                            {
+                                                fastq_R1_file.write(compressed_batch.c_str(), compressed_batch.size());
+                                            }
+                                        } else {
+                                            #pragma omp critical(section1)
+                                            {
+                                                writeBatchToFile(batch_buffer[threadID], fastq_R1_file, false);
+                                            }
+                                        }
+                                    }
                             }
                         }
                     }
@@ -135,13 +165,18 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                 }
             }
             for (size_t l=0;l<batch_buffer.size();l++){
-                writeBatchToFile(batch_buffer[l], fastq_R1_file, true);                                 // If there are unwritten data in batch buffer, write that too when the loop ends
+                writeBatchToFile(batch_buffer[l], fastq_R1_file, parameter.get_compress_output());      // If there are unwritten data in batch buffer, write that too when the loop ends
             }
         }
         // Paired-end sequencing
         else{                                                                                           // If user asked to perform paired-end sequencing
-            std::string output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R2.fastq.gz";
-            std::ofstream fastq_R2_file(output_fastq_R2_filename.c_str(),std::ios::binary);             // ofstream object of the output fastq file for read 2
+            std::string output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(i)+"_R2" + output_file_ending;
+            std::ofstream fastq_R2_file;
+            if (parameter.get_compress_output()) {   
+                fastq_R2_file.open(output_fastq_R2_filename.c_str(),std::ios::binary);
+            } else {
+                fastq_R2_file.open(output_fastq_R2_filename.c_str());
+            }
             
             ART read2;                                                                                  // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
             read2.set_read_error_rates(parameter.get_insertion_error_rate_read2(),parameter.get_deletion_error_rate_read2());
@@ -196,8 +231,8 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                                         // Process read 1 first
                                         std::vector<short> read1_quality_score_vec;                                    // Vector to hold the quality scores for read 1
                                         read1.get_read_quality(read1_quality_score_vec, 1,threadID);                   // Get the read quality scores for the read positions for read 1
-                                        read1.add_baseCall_error(read1_quality_score_vec,threadID);                    // Add base call errors to the read based on the quality scores on read 2
-                                        
+                                        read1.add_baseCall_error(read1_quality_score_vec,threadID);                    // Add base call errors to the read based on the quality scores on read 2  
+
                                         std::string chromID = chromSegSeq_ID; chromID.erase(0,1);                      // Remove the '>' symbol from the chrom ID
                                         std::string read1_data = "@"+chromID+"_read"+std::to_string(j)+"/1\n";         // @readID
                                         read1_data += (*read1.get_final_read_sequence(threadID)) + "\n+\n";            // read sequence and +
@@ -223,10 +258,23 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                                         batch_buffer_r1[threadID].push_back(read1_data);                               // Add the read 1 data to the thread's buffer 1.   
                                         batch_buffer_r2[threadID].push_back(read2_data);                               // Add the read 2 data to the thread's buffer 2.                 
                                         if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                            #pragma omp critical(section1)
-                                            {
-                                                writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
-                                                writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
+                                            if (parameter.get_compress_output()) {
+                                                // compression can be done in paralell, since there is no shared memory. 
+                                                std::string compressed_batch_r1 = getCompressedBatch(batch_buffer_r1[threadID]);
+                                                std::string compressed_batch_r2 = getCompressedBatch(batch_buffer_r2[threadID]);
+                                                // writing can only be done by individual threads. 
+                                                // writeBatchToFile with compression = true is not used so that compression and writing can be done in separate blocks
+                                                #pragma omp critical(section1)
+                                                {
+                                                    fastq_R1_file.write(compressed_batch_r1.c_str(), compressed_batch_r1.size());
+                                                    fastq_R2_file.write(compressed_batch_r2.c_str(), compressed_batch_r2.size());
+                                                }
+                                            } else {
+                                                #pragma omp critical(section1)
+                                                {
+                                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, false);
+                                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, false);
+                                                }
                                             }
                                         }
                                     }
@@ -242,8 +290,8 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                 }
             }
             for (size_t l=0;l<batch_buffer_r1.size();l++){
-                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
-                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, parameter.get_compress_output());                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
+                writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, parameter.get_compress_output());                              // If there are unwritten data in batch buffer 1, write that too when the loop ends
             }
             fastq_R2_file.close();
         }
@@ -278,8 +326,15 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
     //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
     //read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
     
-    std::string output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R1.fastq.gz";
-    std::ofstream fastq_R1_file(output_fastq_R1_filename.c_str(),std::ios::binary);                     // ofstream object of the output fastq file for read 1
+    std::string output_fastq_R1_filename;
+    std::ofstream fastq_R1_file;
+    if (parameter.get_compress_output()) {
+        output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R1.fastq.gz";
+        fastq_R1_file.open(output_fastq_R1_filename.c_str(), std::ios::binary);
+    } else {
+        output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R1.fastq";
+        fastq_R1_file.open(output_fastq_R1_filename.c_str());
+    }
 
     // Generate a list of lines that we want to read randomly from all the cell file prior to reading each file. This is done to avoid processing the same fasta files multiple times to generate reads from it one by one. 
     // Here we generate a map, that indicates which all lines from one fasta files should be read so that we call read all these lines in one go. 
@@ -405,9 +460,17 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                                     
                                     batch_buffer[threadID].push_back(read_data);                                // Add the read data to the batch buffer.                    
                                     if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                        #pragma omp critical(section1)
-                                        {
-                                            writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
+                                        if (parameter.get_compress_output()) {
+                                            std::string compressed_batch = getCompressedBatch(batch_buffer[threadID]);
+                                            #pragma omp critical(section1)
+                                            {
+                                                fastq_R1_file.write(compressed_batch.c_str(), compressed_batch.size());
+                                            }
+                                        } else {
+                                            #pragma omp critical(section1)
+                                            {
+                                                writeBatchToFile(batch_buffer[threadID], fastq_R1_file, false);
+                                            }
                                         }
                                     }
                                 }
@@ -435,8 +498,8 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
             report_readsGenerated_perCell.push_back(reads_actually_generated);                          // Storing the number of reads generated per cell in a vector for the final summary report
         }
         for(size_t l=0; l<batch_buffer.size(); l++){
-            writeBatchToFile(batch_buffer[l], fastq_R1_file, true);
-        } 
+            writeBatchToFile(batch_buffer[l], fastq_R1_file, parameter.get_compress_output());
+        }
     }
     // Paired-end sequencing
     else{
@@ -445,8 +508,15 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read2(), read2.insertion_probability_vec, parameter.get_max_errors_in_read());
         //read2.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read2(), read2.deletion_probability_vec, parameter.get_max_errors_in_read());
         
-        std::string output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R2.fastq.gz";
-        std::ofstream fastq_R2_file(output_fastq_R2_filename.c_str(),std::ios::binary);                 // ofstream object of the output fastq file for read 2
+        std::string output_fastq_R2_filename;
+        std::ofstream fastq_R2_file;
+        if (parameter.get_compress_output()) {
+            output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R2.fastq.gz";
+            fastq_R2_file.open(output_fastq_R2_filename.c_str(), std::ios::binary);
+        } else {
+            output_fastq_R2_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_R2.fastq";
+            fastq_R2_file.open(output_fastq_R2_filename.c_str());
+        }
         
         std::vector<double> fragment_weights;                                                           // Vector to hold the normalized fragment weights
         int min_DNA_fragment_length{1};                                                                 // Variable to hold the minimum DNA fragment length to be generated
@@ -549,10 +619,20 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
                                             batch_buffer_r1[threadID].push_back(read1_data);                          // Add the read 1 data to the batch buffer 1.   
                                             batch_buffer_r2[threadID].push_back(read2_data);                          // Add the read 2 data to the batch buffer 2.                 
                                             if (batch_buffer_r1[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
-                                                #pragma omp critical(section1)
-                                                {
-                                                    writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, true);
-                                                    writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, true);
+                                                if (parameter.get_compress_output()) {
+                                                    std::string compressed_batch_r1 = getCompressedBatch(batch_buffer_r1[threadID]);
+                                                    std::string compressed_batch_r2 = getCompressedBatch(batch_buffer_r2[threadID]);
+                                                    #pragma omp critical(section1)
+                                                    {
+                                                        fastq_R1_file.write(compressed_batch_r1.c_str(), compressed_batch_r1.size());
+                                                        fastq_R2_file.write(compressed_batch_r2.c_str(), compressed_batch_r2.size());
+                                                    }
+                                                } else {
+                                                    #pragma omp critical(section1)
+                                                    {
+                                                        writeBatchToFile(batch_buffer_r1[threadID], fastq_R1_file, false);
+                                                        writeBatchToFile(batch_buffer_r2[threadID], fastq_R2_file, false);
+                                                    }
                                                 }
                                             }
                                         }
@@ -585,8 +665,8 @@ void bulk_cell_sequencing(NGSParameters& parameter, const std::vector<std::strin
         }
      
         for (size_t l=0;l<batch_buffer_r1.size();l++){
-            writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, true);                                  // If there are unwritten data in batch buffer 1, write that too when the loop ends
-            writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, true);                                  // If there are unwritten data in batch buffer 2, write that too when the loop ends
+            writeBatchToFile(batch_buffer_r1[l], fastq_R1_file, parameter.get_compress_output());       // If there are unwritten data in batch buffer 1, write that too when the loop ends
+            writeBatchToFile(batch_buffer_r2[l], fastq_R2_file, parameter.get_compress_output());       // If there are unwritten data in batch buffer 2, write that too when the loop ends
         }
 
         fastq_R2_file.close();

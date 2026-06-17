@@ -20,8 +20,8 @@
 //--------------------------------------------------------------------------------------------
 std::vector<double> ART::read_pair_orientation_dist;                                                    // Vector that stores the fraction of read pair orientation for paired end sequencing
 std::vector<double> ART::read_artifacts_rate_dist;                                                      // Vector that stores the rate of read artifacts and no artifact for a read generation
-std::vector<std::map<unsigned int, unsigned short>> ART::read1_quality_distribution_vec;                // Quality distribution vector for read 1. This vector will not change for each cell 
-std::vector<std::map<unsigned int, unsigned short>> ART::read2_quality_distribution_vec;                // Quality distribution vector for read 2. This vector will not change for each cell 
+std::vector<std::map<float, unsigned short>> ART::read1_quality_distribution_vec;                // Quality distribution vector for read 1. This vector will not change for each cell 
+std::vector<std::map<float, unsigned short>> ART::read2_quality_distribution_vec;                // Quality distribution vector for read 2. This vector will not change for each cell 
 double ART::baseCall_error_probability[80];                                                             // Array that will hold 80 values of base call error probabilities.
 int ART::read_length{0};
 std::string* ART::chromSegSeq;
