@@ -20,8 +20,8 @@
 //--------------------------------------------------------------------------------------------
 std::vector<double> ART::read_pair_orientation_dist;                                                    // Vector that stores the fraction of read pair orientation for paired end sequencing
 std::vector<double> ART::read_artifacts_rate_dist;                                                      // Vector that stores the rate of read artifacts and no artifact for a read generation
-std::vector<std::map<unsigned int, unsigned short>> ART::read1_quality_distribution_vec;                // Quality distribution vector for read 1. This vector will not change for each cell 
-std::vector<std::map<unsigned int, unsigned short>> ART::read2_quality_distribution_vec;                // Quality distribution vector for read 2. This vector will not change for each cell 
+std::vector<std::map<float, unsigned short>> ART::read1_quality_distribution_vec;                // Quality distribution vector for read 1. This vector will not change for each cell 
+std::vector<std::map<float, unsigned short>> ART::read2_quality_distribution_vec;                // Quality distribution vector for read 2. This vector will not change for each cell 
 double ART::baseCall_error_probability[80];                                                             // Array that will hold 80 values of base call error probabilities.
 int ART::read_length{0};
 std::string* ART::chromSegSeq;
@@ -732,18 +732,18 @@ void ART::read_maker(std::string& read_template_seq, int threadID){
 //--------------------------------------------------------------------------------------------
 void ART::get_read_quality(std::vector<short>& read_quality_vec, int read_number, int threadID){
     read_quality_vec.clear();
-    std::vector<std::map<unsigned int, unsigned short>>* quality_distribution_ptr = nullptr;            // Temporary vector pointer of the vector that will hold the quality distribution maps
+    std::vector<std::map<float, unsigned short>>* quality_distribution_ptr = nullptr;            // Temporary vector pointer of the vector that will hold the quality distribution maps
     if(read_number == 1){                                                                               // If it is read 1, then get the quality distribution vector for read 1 
         quality_distribution_ptr = &read1_quality_distribution_vec;
     }else if(read_number == 2){                                                                         // If it is read 2, then get the quality distribution vector for read 2 
         quality_distribution_ptr = &read2_quality_distribution_vec;
     }
-    std::vector<std::map<unsigned int, unsigned short>>& quality_distribution = *quality_distribution_ptr;
+    std::vector<std::map<float, unsigned short>>& quality_distribution = *quality_distribution_ptr;
     
-    unsigned int cumCC;                                                                                 // Temporary integer to hold the map key
-    std::map<unsigned int, unsigned short>::iterator it;                                                // Declares an iterator 'it' for the map that is used to search for quality values.
+    float cumCC;                                                                                 // Temporary integer to hold the map key
+    std::map<float, unsigned short>::iterator it;                                                // Declares an iterator 'it' for the map that is used to search for quality values.
     for(int i=0; i<read_length; i++){                                                                   // For each position of the read
-        cumCC = static_cast<int>(ceil(rng::rand_double(0.0,1.0,threadID)*10000000))+1;                  // Randomly get a map key. Key is in the range [1,10000001]
+        cumCC = rng::rand_float(0.0,1.0,threadID);                                                      // Randomly get a map key. Key is in the range [0,1]
         it = quality_distribution[i].lower_bound(cumCC);                                                // Find the iterator pointing to the first element in the map whose key is greater than or equal to cumCC
         read_quality_vec.push_back(it->second);                                                         // Get the corresponding quality score and store it in the read_quality_vec
     }

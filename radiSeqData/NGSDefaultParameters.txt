@@ -94,3 +94,5 @@ read2_deletion_error_rate                   = 0.00023                 # Specify 
 output_FASTQ_filename_prefix                = CELL                    # Prefix for the sequenced output FASTQ file (omit file extension)
 
 make_summary_report                         = True                    # "True" if user wishes to generate a summary report file at the end of run
+
+compress_output                             = True                    # "True" if the user wishes to compress the output FASTQ files (gzip)
