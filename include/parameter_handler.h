@@ -59,6 +59,7 @@ class NGSParameters{
     double r2_delError_rate;                                                     // Deletion error rate in read 2 
     std::string fastq_filename_prefix;                                           // String to hold the user-specified fastq output filename prefix
     bool is_summary_report{false};                                               // True if user wishes to generate a summary report at the end of the run
+    bool is_compress_output{false};                                              // True if the user wishes to compress the output FASTQ files (gzip)
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -192,6 +193,9 @@ public:
 
     void set_summary_report(std::string*, std::string*);                         // function to set "is_summary_report"
     bool get_summary_report();                                                   // function to get "is_summary_report"
+
+    void set_compress_output(std::string*, std::string*);                        // function to set "is_compress_output"
+    bool get_compress_output();                                                  // function to get "is_compress_output"
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

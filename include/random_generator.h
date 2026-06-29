@@ -60,6 +60,12 @@ namespace rng{
         return dist(generator);
     }
 
+    inline float rand_float(float lowerBound, float upperBound, int threadID = 0){
+        std::mt19937& generator = local_mt[threadID];
+        std::uniform_real_distribution<float> dist(lowerBound, upperBound);
+        return dist(generator);
+    }
+
     // This function calculates the probability of observing k or more successes in n independent Bernoulli trials, 
     // each with a success probability of p. It returns the complement of the cumulative distribution function (CDF), 
     // which represents the probability of observing a value greater than or equal to k.
