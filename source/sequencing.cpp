@@ -135,12 +135,6 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                                 read_data += "\n";
                                 
                                 batch_buffer[threadID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread                    
-                                if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the thread's batch buffer is full, and write it to the file if needed.
-                                    #pragma omp critical(section1)
-                                    {
-                                        writeBatchToFile(batch_buffer[threadID], fastq_R1_file, true);
-                                    }
-                                }
                                 if (batch_buffer[threadID].size() >= static_cast<size_t>(batchSize_thread)){// Check if the batch buffer is full, and write it to the file if needed.
                                         if (parameter.get_compress_output()) {
                                             // compression can be done in paralell, since there is no shared memory. 
