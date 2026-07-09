@@ -174,7 +174,12 @@ bool ART::int_set(std::string& chromSeq, int nThreads){
 }
 //--------------------------------------------------------------------------------------------
 
-
+void ART::resize_vectors(int nThreads) {
+    indel_map_vec.clear();                                                                              // Clear any pre-existing data
+    read_seq_vec.clear();
+    indel_map_vec.resize(nThreads);                                                                     // Resize the vector to accomodate all threads
+    read_seq_vec.resize(nThreads);
+}
 
 //--------------------------------------------------------------------------------------------
 // This function returns the chromosome segment sequence that is currently being processed. 
@@ -458,6 +463,16 @@ void ART::generate_read_with_indel(int threadID){
 }
 //--------------------------------------------------------------------------------------------
 
+void ART::generate_read_with_indel_from_frag(std::string& DNA_sequence, int threadID) {
+    int length_changed = get_indel_map(threadID);  
+    std::cout << "len " << length_changed << "\n";
+    if(static_cast<int>(read_length-length_changed) > static_cast<int>(DNA_sequence.length())){// Check if the generated read map requires a sequence that extends beyond the chromSegmentSeq size 
+        length_changed = get_balanced_indel_map(threadID);                                                      // If it does, generate another indel map, which will have number of deletions <= number of insertions to avoid it happening
+    }             
+    std::string read_template_seq = DNA_sequence.substr(0, read_length-length_changed);
+    std::cout << "read t seq  " << read_template_seq << "\n";
+    read_maker(read_template_seq, threadID);     
+}
 
 
 //--------------------------------------------------------------------------------------------
@@ -473,7 +488,7 @@ int ART::get_indel_map(int threadID){
     indel_map.clear();
     int insertion_length{0};                                                                            // Variable to hold the size of the insertion made
     int deletion_length{0};                                                                             // Variable to hold the size of the deletion made
-   
+    
     // Processing deletions first
     if(deletion_rate != 0.0){
         deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, read_length, threadID)); // Find size X

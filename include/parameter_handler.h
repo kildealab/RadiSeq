@@ -23,7 +23,7 @@ class NGSParameters{
     std::string reference_genome_file;                                           // Variable holding reference genome fasta file path
     double max_diff_model_Vs_reference;                                          // Variable to hold the maximum acceptable difference in the lengths of MC model genome and the reference genome in percentage
     std::string output_directory;                                                // Path to the output directory where all the fastq files generated should be stored
-    //int dsb_threshold;                                                           // This will hold the threshold distance between two opposite SSBs to form a DSB, in bp.
+    int dsb_threshold;                                                            // This will hold the threshold distance between two opposite SSBs to form a DSB, in bp.
     std::string sequencer;                                                       // Name of the illumina sequencer to be used. Must be one with the build-in error profiles
     std::vector<std::string> list_sequencers;                                    // The list of names of all the built-in sequencer profiles we have
     int read_length;                                                             // Automatically set the read length based on the user provided sequencer name.
@@ -60,6 +60,13 @@ class NGSParameters{
     std::string fastq_filename_prefix;                                           // String to hold the user-specified fastq output filename prefix
     bool is_summary_report{false};                                               // True if user wishes to generate a summary report at the end of the run
     bool is_compress_output{false};                                              // True if the user wishes to compress the output FASTQ files (gzip)
+    bool is_induce_seq{false};                                                   // True if the user wishes to induce sequencing errors/artifacts
+    int P5_adapter_length;                                                       // Length of the P5 adapter/primer, used when filtering DSB fragments in induce_seq
+    int first_size_filter;                                                       // First size filter threshold, used when filtering DSB fragments in induce_seq
+    double maximum_overlap_fragment_generation;                                  // Max fraction of the gap between two DSBs that their fragments may overlap by, used in induce_seq
+    std::string induce_seq_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
+    std::string induce_seq_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
+    bool is_output_sequenced_dsbs{true};                                         // True if user wishes to output the DSBs that were sequenced in induce_seq
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -99,8 +106,8 @@ public:
     void set_output_directory(std::string*);                                     // function to set the path to output directory
     const std::string* get_output_directory();                                   // function to get the output directory path
 
-    //void set_dsb_threshold(std::string*);                                        // function to set the DSB threshold value
-    //int get_dsb_threshold();                                                     // function to get the DSB threshold values
+    void set_dsb_threshold(std::string*);                                         // function to set the DSB threshold value
+    int get_dsb_threshold();                                                      // function to get the DSB threshold values
 
     void set_sequencer(std::string*);                                            // function to set the name of the illumina sequencer
     const std::string* get_sequencer();                                          // function to get the sequencer name
@@ -196,6 +203,24 @@ public:
 
     void set_compress_output(std::string*, std::string*);                        // function to set "is_compress_output"
     bool get_compress_output();                                                  // function to get "is_compress_output"
+
+    void set_induce_seq(std::string*, std::string*);                             // function to set "is_induce_seq"
+    bool get_induce_seq();                                                       // function to get "is_induce_seq"
+
+    void set_P5_adapter_length(std::string*);                                    // function to set the P5 adapter/primer length
+    int get_P5_adapter_length();                                                 // function to get the P5 adapter/primer length
+
+    void set_first_size_filter(std::string*);                                    // function to set the first size filter threshold
+    int get_first_size_filter();                                                 // function to get the first size filter threshold
+
+    void set_maximum_overlap_fragment_generation(std::string*, std::string*);    // function to set the maximum allowed fragment overlap fraction
+    double get_maximum_overlap_fragment_generation();                           // function to get the maximum allowed fragment overlap fraction
+
+    void set_induce_seq_fragment_size_distribution_path(std::string*, std::string*);  // function to set 'induce_seq_fragment_size_distribution_path'
+    const std::string* get_induce_seq_fragment_size_distribution_path();              // function to get 'induce_seq_fragment_size_distribution_path'
+
+    void set_output_sequenced_dsbs(std::string*, std::string*);              // function to set "is_output_sequenced_dsbs"
+    bool get_output_sequenced_dsbs();                                        // function to get "is_output_sequenced_dsbs"
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

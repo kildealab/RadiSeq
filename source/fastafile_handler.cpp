@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sys/mman.h>
 #include <omp.h>
+#include <cctype>
 
 
 //--------------------------------------------------------------------------------------------
@@ -115,7 +116,79 @@
 } */
 //--------------------------------------------------------------------------------------------
 
+// DDDD
+// int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, const std::string* ref_seqPath, const std::vector<long>& chrom_end_loc) {
+//     size_t refFileSize;
+//     cum_chrom_header_sizes.clear();
+//     void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                              // Create the memory-map of the reference genome file
+//     const char* refSeqData = static_cast<char*>(refFileMM); 
+    
+//     int n_chromosomes = chrom_end_loc.size() - 1;
+//     int i = 0;
+//     int cum_chrom_header_size = 0;
+//     long pos = 0;
+//     while (i != n_chromosomes) {
+//         if (i != 0) {cum_chrom_header_size++;}                                                           // Every header except the first is preceded by the '\n' that ends the previous chromosome's sequence line
+//         if (refSeqData[pos] != '>') return 1;
+//         while (refSeqData[pos] != '\n') {
+//             cum_chrom_header_size++;
+//             pos++;
+//         }
+//         cum_chrom_header_size++;
+//         pos++;
+//         long seq_length = chrom_end_loc[i+1] - chrom_end_loc[i];                                         // Number of actual bases (excluding line-wrap newlines) in this chromosome's sequence
+//         long basesRead = 0;
+//         while (basesRead < seq_length) {                                                                 // Walk through the sequence, since it may be wrapped across multiple lines
+//             if (refSeqData[pos] == '\n') {                                                               // A newline here is a line-wrap within the sequence, not a base
+//                 cum_chrom_header_size++;
+//                 pos++;
+//             } else {
+//                 pos++;
+//                 basesRead++;
+//             }
+//         }
+//         cum_chrom_header_size++;                                                                          // Count the newline that terminates the sequence's last line
+//         pos++;
+//         cum_chrom_header_sizes.push_back(cum_chrom_header_size);
+//         if (i < n_chromosomes - 2) {
+//             i += 2;
+//         } else {
+//             i++;
+//         }
+//     }
+//     if (refSeqData[pos] != '\0') return 1;
 
+//     return 0;
+// }
+
+//DDDD
+int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, char* fasta_file, const std::vector<long>& chrom_end_loc) {
+    size_t i = 0;
+    long pos = 0;
+    int cum_header = 0;
+    size_t n_chrom = chrom_end_loc.size() - 1;
+    cum_chrom_header_sizes.clear();
+    chrom_headers.clear();
+
+    while (i < n_chrom) {
+        pos = cum_header + chrom_end_loc[i];
+        if (!(fasta_file[pos] == '>' || fasta_file[pos] == '\n')) {
+            return 1;
+        }
+        long header_start = pos;
+        pos ++;
+        cum_header++;
+        while (fasta_file[pos] != '\n') {
+            pos++;
+            cum_header++;
+        }
+        chrom_headers.push_back(std::string(fasta_file + header_start, fasta_file + pos));                // Header text excluding the trailing '\n'
+        cum_header++;
+        cum_chrom_header_sizes.push_back(cum_header);
+        i ++;
+    }
+    return 0;
+}
 
 //--------------------------------------------------------------------------------------------
 // This function will process the reference genome memory-map data provided and generate an 
@@ -144,7 +217,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
     const char* refSeqData = static_cast<char*>(refFileMM);                                               // Casting the memory-map void pointer to a const char pointer for further processing
     const int batchSize{10};                                                                              // Define a batch size for writing data to the output memory-mapped file. These much data (buffer vector elements) will be stored in cache before writing it on the file
     std::vector<std::string> batch_buffer;                                                                // Create a buffer for storing output data.
-
+    
     switch(chrmMapping){                                                                                  // Decide how to write the sequences to file depending on the chromosome mapping
         case 0:                                                                                           // If cell is haploid (chromosome mapping type 0)
             while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
@@ -278,6 +351,119 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
         }
     }
     return seqLength;
+}
+//--------------------------------------------------------------------------------------------
+
+
+
+//--------------------------------------------------------------------------------------------
+// This function is a variant of buildUndamagedGenomeTemplate_MM. It only writes the strand that
+// is directly present in the reference genome; no reverse-complementary strand is generated or
+// written, and no GC-bias read weights are computed. Chromosomes are still duplicated according
+// to the ploidy/chromosome mapping (chrmMapping), the same way buildUndamagedGenomeTemplate_MM
+// does, so the layout and IDs of the output template are unchanged apart from the missing 'b'
+// (reverse-complementary) entries.
+//
+// 'cum_chrom_header_sizes' is populated so that cum_chrom_header_sizes[i] equals the number of
+// non-base-pair characters (chromosome headers, and any '\n'/'\r' characters) present in the
+// reference genome file up to and including the header line of the (i+1)-th chromosome found in
+// that file. A base pair whose position in the genome is P and which belongs to the chromosome
+// at index i can therefore be located in the reference file at character index P+cum_chrom_header_sizes[i].
+//
+// 'chrom_sizes_bp' must list, in order, the size in bp of every chromosome physically present in
+// the reference genome file. This is used purely to validate the reference genome file: if the
+// chromosome sizes found in the file match 'chrom_sizes_bp', the function returns 0; otherwise
+// (or if the file doesn't have the expected number of chromosomes) it returns 1 and the template
+// file is not written.
+//--------------------------------------------------------------------------------------------
+int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<int>& cum_chrom_header_sizes, const std::vector<long>& chrom_sizes_bp){
+    cum_chrom_header_sizes.clear();
+
+    size_t refFileSize;                                                                                 // A variable to hold the file size of the reference genome, during memory-mapping
+    void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                             // Create the memory-map of the reference genome file
+    const char* refSeqData = static_cast<char*>(refFileMM);                                              // Casting the memory-map void pointer to a const char pointer for further processing
+
+    // Second pass: build the forward-strand-only template file, duplicating chromosomes according
+    // to the ploidy/chromosome mapping, the same way buildUndamagedGenomeTemplate_MM does.
+    char* position_in_MM = templateFileMapping;                                                          // Pointer to the current position in the MM as we write. Starts with the pointer to the beginning
+    if (position_in_MM == nullptr){ munmap(refFileMM, refFileSize); return 1; }                          // Return if the template file memory map is not valid
+
+    int TotalChrms = nChrms;                                                                              // Holds the total number of chromosome till the end
+    std::string chromSeq_ID;                                                                              // String to hold the chromosome sequence ID. This value is not used in this function but needed to pass to the getNextChromSeq functon
+    std::string chromSeq;                                                                                 // String to store the forward chromseq from reference seq file
+    int chrmCount{0};                                                                                     // Seperate counter to set the seq ID. This value will not be same as nChrms if diploid
+    size_t position{0};                                                                                   // Temporary variable to hold the last-read position in the memory map of the reference file
+    const int batchSize{10};                                                                              // Define a batch size for writing data to the output memory-mapped file. These much data (buffer vector elements) will be stored in cache before writing it on the file
+    std::vector<std::string> batch_buffer;                                                                // Create a buffer for storing output data.
+
+    switch(chrmMapping){                                                                                  // Decide how to write the sequences to file depending on the chromosome mapping
+        case 0:                                                                                           // If cell is haploid (chromosome mapping type 0)
+            while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
+                uppercaseString(chromSeq);                                                                // Change lowercase -> Uppercase
+                chrmCount++;
+                if(nChrms>2){                                                                             // Write according to the mapping 1 pattern
+                    batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a\n"+chromSeq+"\n");
+                    nChrms--;
+                }else{                                                                                    // No need to have copies of X, Y chromosomes
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    nChrms--;
+                }
+                if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                    writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
+                }
+            }
+            break;
+        case 1:                                                                                           // If the cell is diploid with chromosome mapping type 1 (1,1,2,2,....22,22,X,Y)
+            while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
+                uppercaseString(chromSeq);                                                                // Change lowercase -> Uppercase
+                chrmCount++;
+                if(nChrms>2){                                                                             // Until all autosomes are done,
+                    for(int i=0; i<2; i++){                                                               // Write according to the mapping 1 pattern
+                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
+                        nChrms--;
+                    }
+                }else{                                                                                    // No need to have copies of X, Y chromosomes
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    nChrms--;
+                }
+                if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                    writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
+                }
+            }
+            break;
+        case 2:                                                                                           // If the cell is diploid with chromosome mapping type 2 (1,2.....22,1,2.....22,X,Y)
+            for(int i=0; i<2; i++){
+                position = 0;                                                                             // Reset the starting positon of the memory map in each iteration
+                chrmCount = 0;
+                while(getNextChromSeq_MM(refSeqData, refFileSize, position, chromSeq, chromSeq_ID) && nChrms>0){
+                    uppercaseString(chromSeq);                                                            // Change lowercase -> Uppercase
+                    chrmCount++;
+                    if(chrmCount<int(TotalChrms/2)){                                                      // Write the autosomes once in the for loop
+                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
+                        nChrms--;
+                    }
+                    if (chrmCount>=int((TotalChrms/2)-1) && i==0){                                        // Skip the sex chromosomes in the first for loop and write autosomes again
+                        break;
+                    }else if(chrmCount>=int(TotalChrms/2) && i>0){                                        // In the second loop, write the sex chromosomes as well
+                        batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                        nChrms--;
+                    }
+                    if (batch_buffer.size() >= batchSize){                                                // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
+                        writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
+                    }
+                }
+            }
+            break;
+    }
+    if(nChrms!=0){                                                                                        // If fewer sequences than expected was found in the reference file, then error and exit
+        std::cerr<<"\n ERROR: Only "<<chrmCount<<" chromosomse seqences were found in the reference file\n";
+        std::cerr<<" A sequence file with "<<TotalChrms<<" chromosomes arranged in 1,2,3.....X,Y fashion is expected \n";
+        exit(EXIT_FAILURE);
+    }
+    munmap(refFileMM, refFileSize);                                                                       // Unmap the reference genome file to avoid memory-leaks
+    writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);              // If there are unwritten data in batch buffer, write that too when the loop ends
+
+    return 0;
 }
 //--------------------------------------------------------------------------------------------
 

@@ -2,10 +2,16 @@
 #include "fileio.h"
 #include "support_functions.h"
 #include "random_generator.h"
+#include "art_framework.h"
+#include "fastafile_handler.h"
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <omp.h>
+#include <iostream>
+#include <map>
+
 
 // Default constructor
 NGSsdd::NGSsdd(){
@@ -82,7 +88,9 @@ void NGSsdd::set_chrom_size_bp(std::string* sddField){
         if (temp_vec[i+2].back() == ';'){                                                               // Check if the ';' character is at the end. Last entry might have it.
             temp_vec[i+2].erase(temp_vec[i+2].size() - 1);                                              // Remove the ';' character
         }
-        chrom_size_bp.push_back(std::stold(temp_vec[i+2])*1e6);                                         // Convert chrom size from Mbp to bp before storing
+        // chrom_size_bp.push_back(std::stold(temp_vec[i+2])*1e6);                                         // Convert chrom size from Mbp to bp before storing
+        chrom_size_bp.push_back(std::lroundl(std::stold(temp_vec[i+2])*1e6));  
+        std::cout << chrom_size_bp.back() << "\n";
     }
 }
 void NGSsdd::set_cell_ploidy_and_chrom_mappping(std::string* sddField){
@@ -177,23 +185,19 @@ void NGSsdd::set_sddData_field7(std::string* sddField7, int groupTID, int worker
         if (temp_vec2[2] == 0){continue;}                                                               // Skip the damage if it is a non-damage interaction
         else{
             #pragma omp atomic                                                                          // Ensure that the following counter will be updated by only one thread at a time
-            original_num_damages[groupTID]++;                                                           // Count total number of damages in one exposure in one SDD if it is a valid damage
+            original_num_damages[groupTID]++;     
+            damage_location = chrom_end_loc[chrom_ID-1]+damage_start_loc+(temp_vec2[1]-1);              // damage location = end_loc_of previous chrom+ start_loc_of damage block wrt chrom + (damage location w.r.t damage block - 1).                                         // Count total number of damages in one exposure in one SDD if it is a valid damage
             switch(temp_vec2[0]){                                                                       // temp_vec2[0] indicate where the damage is: base vs backbone
-                case 1:                                                                                 // Backbone 1
-                    damage_location = chrom_end_loc[chrom_ID-1]+damage_start_loc+(temp_vec2[1]-1);      // damage location = end_loc_of previous chrom+ start_loc_of damage block wrt chrom + (damage location w.r.t damage block - 1). 
+                case 1:                                                                                 // Backbone 1          
                     temp_backbone1_breaks_vec[groupTID][workerTID].push_back(damage_location);          // 1 is subtracted because damage location w.r.t damage block starts from 1 not 0.
                     break;
                 case 2:                                                                                 // Base strand 1
-                    
-                    damage_location = chrom_end_loc[chrom_ID-1]+damage_start_loc+(temp_vec2[1]-1);
                     temp_basestrand1_damages_vec[groupTID][workerTID].push_back(damage_location);
                     break;
                 case 3:                                                                                 // Base strand 2
-                    damage_location = chrom_end_loc[chrom_ID-1]+damage_start_loc+(temp_vec2[1]-1);
                     temp_basestrand2_damages_vec[groupTID][workerTID].push_back(damage_location);
                     break;
                 case 4:                                                                                 // Backbone 2
-                    damage_location = chrom_end_loc[chrom_ID-1]+damage_start_loc+(temp_vec2[1]-1);
                     temp_backbone2_breaks_vec[groupTID][workerTID].push_back(damage_location);
                     break;
             }
@@ -268,6 +272,7 @@ std::vector<long>& NGSsdd::get_basestrand1_damage_loc(int groupTID){
 std::vector<long>& NGSsdd::get_basestrand2_damage_loc(int groupTID){
     return(basestrand2_damage_loc_vec[groupTID]);
 }
+
 //--------------------------------------------------------------------------------------------
 
 

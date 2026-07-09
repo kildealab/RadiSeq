@@ -29,7 +29,7 @@ acceptable_difference_in_seq_length_percent = 10                      # Specify 
 
 output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
-#DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a 
+DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a
                                                                       # double-strand break (DSB). Specify the distance in bp
 
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
@@ -94,5 +94,12 @@ read2_deletion_error_rate                   = 0.00023                 # Specify 
 output_FASTQ_filename_prefix                = CELL                    # Prefix for the sequenced output FASTQ file (omit file extension)
 
 make_summary_report                         = True                    # "True" if user wishes to generate a summary report file at the end of run
-
+to the 
 compress_output                             = True                    # "True" if the user wishes to compress the output FASTQ files (gzip)
+
+induce_seq                                  = False                   # "True" if the user wishes to induce sequencing errors/artifacts
+
+induce_seq_fragment_size_distribution_path  = default                 # Path to the file containing the DNA fragment size distribution used when induce_seq is True.
+                                                                      # Default path is hard-coded (FragmentSizeDist_induceSeq.txt), but user can change.
+
+output_sequenced_dsbs                       = True                   # "True" if user wishes to output the DSBs that were sequenced in induce_seq

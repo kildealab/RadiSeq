@@ -9,8 +9,13 @@
 
 // Default constructor
 NGSParameters::NGSParameters(){
+    dsb_threshold = 10;
+    P5_adapter_length = 58;
+    first_size_filter = 150;
+    maximum_overlap_fragment_generation = 0.4;
     default_parameter_file_name = "/NGSDefaultParameters.txt";
     reference_genome_file_name = "/Human_reference_genome.fa";
+    induce_seq_fragment_size_distribution_file_name = "/FragmentSizeDist_induceSeq.txt";
     list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","Test","Custom"};
     list_read_lengths = {100, 100, 125, 150, 150, 151, 5};
     list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
@@ -39,6 +44,7 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
     // Defining data filenames w.r.t the variable dataFolderPath
     default_parameter_file = dataFolderPath+default_parameter_file_name;
     reference_genome_file = dataFolderPath+reference_genome_file_name;
+    induce_seq_fragment_size_distribution_path = dataFolderPath+induce_seq_fragment_size_distribution_file_name;
 
     // Continue if parameter file is present and set all parameter values
     readParameterFile(&default_parameter_file, parameter);         // Read default parameter file first to set default parameter values
@@ -95,9 +101,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "output_directory_path"){
         set_output_directory(paramValue);
     }
-    //else if (*paramName == "DSB_threshold_in_bp"){
-    //    set_dsb_threshold(paramValue);
-    //}
+    else if (*paramName == "DSB_threshold_in_bp"){
+        set_dsb_threshold(paramValue);
+    }
     else if (*paramName == "illumina_sequencer"){
         set_sequencer(paramValue);
     }
@@ -182,6 +188,24 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "compress_output"){
         set_compress_output(paramName, paramValue);
     }
+    else if (*paramName == "induce_seq"){
+        set_induce_seq(paramName, paramValue);
+    }
+    else if (*paramName == "P5_adapter_length"){
+        set_P5_adapter_length(paramValue);
+    }
+    else if (*paramName == "first_size_filter"){
+        set_first_size_filter(paramValue);
+    }
+    else if (*paramName == "maximum_overlap_fragment_generation"){
+        set_maximum_overlap_fragment_generation(paramName, paramValue);
+    }
+    else if (*paramName == "induce_seq_fragment_size_distribution_path"){
+        set_induce_seq_fragment_size_distribution_path(paramName, paramValue);
+    }
+    else if (*paramName == "output_sequenced_dsbs"){
+        set_output_sequenced_dsbs(paramName, paramValue);
+    }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
         <<" ----- This parameter will be ignored -----\n";
@@ -249,9 +273,38 @@ void NGSParameters::set_max_acceptable_seq_length_difference(std::string* paramV
 void NGSParameters::set_output_directory(std::string* paramValue){
     output_directory = *paramValue;
 }
-//void NGSParameters::set_dsb_threshold(std::string* paramValue){
-//    dsb_threshold = std::stoi(*paramValue);
-//}
+void NGSParameters::set_dsb_threshold(std::string* paramValue){
+    dsb_threshold = std::stoi(*paramValue);
+}
+void NGSParameters::set_P5_adapter_length(std::string* paramValue){
+    P5_adapter_length = std::stoi(*paramValue);
+}
+void NGSParameters::set_first_size_filter(std::string* paramValue){
+    first_size_filter = std::stoi(*paramValue);
+}
+void NGSParameters::set_maximum_overlap_fragment_generation(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        maximum_overlap_fragment_generation = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.4\" -----\n";
+    }
+}
+void NGSParameters::set_induce_seq_fragment_size_distribution_path(std::string* paramName, std::string* paramValue){
+    if(*paramValue == "default"){                                                       // If reading default parameter file, keep the hard-coded default path computed in process_parameterFile
+        return;
+    }else{
+        induce_seq_fragment_size_distribution_path = *paramValue;
+    }
+}
+void NGSParameters::set_output_sequenced_dsbs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_output_sequenced_dsbs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_sequenced_dsbs()<<"\" -----\n";
+    }
+}
 void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
 }
@@ -434,6 +487,14 @@ void NGSParameters::set_compress_output(std::string* paramName, std::string* par
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_compress_output()<<"\" -----\n";
     }
 }
+void NGSParameters::set_induce_seq(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_induce_seq = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_induce_seq()<<"\" -----\n";
+    }
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -474,9 +535,24 @@ double NGSParameters::get_max_acceptable_seq_length_difference(){
 const std::string* NGSParameters::get_output_directory(){
     return(&output_directory);
 }
-//int NGSParameters::get_dsb_threshold(){
-//    return(dsb_threshold);
-//}
+int NGSParameters::get_dsb_threshold(){
+    return(dsb_threshold);
+}
+int NGSParameters::get_P5_adapter_length(){
+    return(P5_adapter_length);
+}
+int NGSParameters::get_first_size_filter(){
+    return(first_size_filter);
+}
+double NGSParameters::get_maximum_overlap_fragment_generation(){
+    return(maximum_overlap_fragment_generation);
+}
+const std::string* NGSParameters::get_induce_seq_fragment_size_distribution_path(){
+    return(&induce_seq_fragment_size_distribution_path);
+}
+bool NGSParameters::get_output_sequenced_dsbs(){
+    return(is_output_sequenced_dsbs);
+}
 const std::string* NGSParameters::get_sequencer(){
     return(&sequencer);
 }
@@ -573,6 +649,9 @@ bool NGSParameters::get_summary_report(){
 bool NGSParameters::get_compress_output(){
     return(is_compress_output);
 }
+bool NGSParameters::get_induce_seq(){
+    return(is_induce_seq);
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -613,6 +692,10 @@ void NGSParameters::help_parameter(std::string* paramName){
         std::cerr<<" Specify the path to the FASTA file with the reference genome. \n"
         <<" Specified reference genome must be in a valid FASTA file ending with '.fa' extension. \n"
         <<" If not specified, the default Ashkenazi human reference genome will be used\n";
+    }
+    else if (*paramName == "DSB_threshold_in_bp"){
+        std::cerr<<" Specify the maximum distance (in bp) between two opposite-strand breaks for them to be considered as part of the same double-strand break (DSB). \n"
+        <<" This value should be a non-negative integer \n";
     }
     else if (*paramName == "illumina_sequencer"){
         std::cerr<<" Specify the name of the Illumina sequencer to be used for sequencing. \n"
@@ -703,6 +786,14 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "compress_output"){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to compress the output FASTQ files (gzip) \n";
+    }
+    else if (*paramName == "induce_seq"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not you wish to induce sequencing errors/artifacts \n";
+    }
+    else if (*paramName == "maximum_overlap_fragment_generation"){
+        std::cerr<<" Specify the maximum fraction of the gap between two neighbouring DSBs that their generated fragments are allowed to overlap by. \n"
+        <<" This value should be a double in the range [0,1]\n";
     }
 }
 //--------------------------------------------------------------------------------------------

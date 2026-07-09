@@ -47,6 +47,7 @@ public:
     void set_read_error_rates(double, double);
 
     bool int_set(std::string&, int);                                                                    // Function to set the chromsome segment Sequence, read lengh, indel map vector, GC bin Size
+    void resize_vectors(int);                                                                           // Function to resize indel_map_vec and read_seq_vec to the number of threads
     //const std::string* get_chromSegmentSeq();                                                           // Function to get the chrom segment sequence currently processing
     //int get_read_length();                                                                              // Function to get the read length that we want to generate
     
@@ -55,6 +56,7 @@ public:
     static bool MDA_distribution_maker(long, double);                                                   // Function to create the coverage distribution profile for MDA for each cell
     
     void generate_read_with_indel(int);                                                                 // Function that that ultimately call all subfunctions to generate a read with indel damages
+    void generate_read_with_indel_from_frag(std::string&, int);                                         // Function to generate a read with indel damages from a given DNA fragment sequence
     int get_indel_map(int);                                                                             // Function to generate an indel distribution map for a read
     int get_balanced_indel_map(int);                                                                    // Function to generate an indel distribution map that will have deletions <= insertions
     void generate_chimeric_read(std::string&, int);
