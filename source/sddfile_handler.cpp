@@ -82,7 +82,7 @@ void NGSsdd::set_chrom_size_bp(std::string* sddField){
         if (temp_vec[i+2].back() == ';'){                                                               // Check if the ';' character is at the end. Last entry might have it.
             temp_vec[i+2].erase(temp_vec[i+2].size() - 1);                                              // Remove the ';' character
         }
-        chrom_size_bp.push_back(std::stold(temp_vec[i+2])*1e6);                                         // Convert chrom size from Mbp to bp before storing
+        chrom_size_bp.push_back(std::lroundl(std::stold(temp_vec[i+2])*1e6));                           // Convert chrom size from Mbp to bp before storing
     }
 }
 void NGSsdd::set_cell_ploidy_and_chrom_mappping(std::string* sddField){
