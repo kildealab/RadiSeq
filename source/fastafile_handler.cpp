@@ -162,7 +162,7 @@
 // }
 
 //DDDD
-int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, char* fasta_file, const std::vector<long>& chrom_end_loc) {
+int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, char* fasta_file, size_t fasta_file_size, const std::vector<long>& chrom_end_loc) {
     size_t i = 0;
     long pos = 0;
     int cum_header = 0;
@@ -173,6 +173,13 @@ int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::
     while (i < n_chrom) {
         pos = cum_header + chrom_end_loc[i];
         if (!(fasta_file[pos] == '>' || fasta_file[pos] == '\n')) {
+            return 1;
+        }
+        if (fasta_file[pos] == '\n') {                                    // Landed on the previous chromosome's sequence-terminating newline; step over it so it isn't captured as part of this header
+            pos++;
+            cum_header++;
+        }
+        if (fasta_file[pos] != '>') {
             return 1;
         }
         long header_start = pos;
@@ -187,6 +194,21 @@ int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::
         cum_chrom_header_sizes.push_back(cum_header);
         i ++;
     }
+
+    // The character right after the last tracked chromosome's sequence must be the newline that
+    // terminates it. What follows that newline must then be either the end of the data actually
+    // written (the rest of the memory-mapped file is left as padding spaces) or another header line
+    // (e.g. mitochondrial DNA appended after the tracked chromosomes). Anything else means the
+    // chromosome sizes used to build the template don't match what was actually written.
+    long last_seq_end = cum_header + chrom_end_loc[n_chrom];
+    if (static_cast<size_t>(last_seq_end) >= fasta_file_size || fasta_file[last_seq_end] != '\n') {
+        return 1;
+    }
+    long after_last_seq = last_seq_end + 1;
+    if (static_cast<size_t>(after_last_seq) < fasta_file_size && !(fasta_file[after_last_seq] == '>' || fasta_file[after_last_seq] == ' ')) {
+        return 1;
+    }
+
     return 0;
 }
 
@@ -364,19 +386,10 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
 // does, so the layout and IDs of the output template are unchanged apart from the missing 'b'
 // (reverse-complementary) entries.
 //
-// 'cum_chrom_header_sizes' is populated so that cum_chrom_header_sizes[i] equals the number of
-// non-base-pair characters (chromosome headers, and any '\n'/'\r' characters) present in the
-// reference genome file up to and including the header line of the (i+1)-th chromosome found in
-// that file. A base pair whose position in the genome is P and which belongs to the chromosome
-// at index i can therefore be located in the reference file at character index P+cum_chrom_header_sizes[i].
-//
-// 'chrom_sizes_bp' must list, in order, the size in bp of every chromosome physically present in
-// the reference genome file. This is used purely to validate the reference genome file: if the
-// chromosome sizes found in the file match 'chrom_sizes_bp', the function returns 0; otherwise
-// (or if the file doesn't have the expected number of chromosomes) it returns 1 and the template
-// file is not written.
+// 'cum_chrom_header_sizes' is cleared here; it is populated afterwards by calculateCumChromHeaderSizes,
+// which also validates that the written template matches the chromosome sizes expected from the SDD file.
 //--------------------------------------------------------------------------------------------
-int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<int>& cum_chrom_header_sizes, const std::vector<long>& chrom_sizes_bp){
+int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<int>& cum_chrom_header_sizes){
     cum_chrom_header_sizes.clear();
 
     size_t refFileSize;                                                                                 // A variable to hold the file size of the reference genome, during memory-mapping
@@ -402,10 +415,10 @@ int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::
                 uppercaseString(chromSeq);                                                                // Change lowercase -> Uppercase
                 chrmCount++;
                 if(nChrms>2){                                                                             // Write according to the mapping 1 pattern
-                    batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a\n"+chromSeq+"\n");
+                    batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"\n"+chromSeq+"\n");
                     nChrms--;
                 }else{                                                                                    // No need to have copies of X, Y chromosomes
-                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"\n"+chromSeq+"\n");
                     nChrms--;
                 }
                 if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
@@ -419,11 +432,11 @@ int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::
                 chrmCount++;
                 if(nChrms>2){                                                                             // Until all autosomes are done,
                     for(int i=0; i<2; i++){                                                               // Write according to the mapping 1 pattern
-                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
+                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
                         nChrms--;
                     }
                 }else{                                                                                    // No need to have copies of X, Y chromosomes
-                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                    batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"\n"+chromSeq+"\n");
                     nChrms--;
                 }
                 if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
@@ -439,13 +452,13 @@ int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::
                     uppercaseString(chromSeq);                                                            // Change lowercase -> Uppercase
                     chrmCount++;
                     if(chrmCount<int(TotalChrms/2)){                                                      // Write the autosomes once in the for loop
-                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"a_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
+                        batch_buffer.push_back(">chr"+std::to_string(chrmCount)+"_copy"+std::to_string(i+1)+"\n"+chromSeq+"\n");
                         nChrms--;
                     }
                     if (chrmCount>=int((TotalChrms/2)-1) && i==0){                                        // Skip the sex chromosomes in the first for loop and write autosomes again
                         break;
                     }else if(chrmCount>=int(TotalChrms/2) && i>0){                                        // In the second loop, write the sex chromosomes as well
-                        batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"a\n"+chromSeq+"\n");
+                        batch_buffer.push_back(">chrXY_"+std::to_string(nChrms)+"\n"+chromSeq+"\n");
                         nChrms--;
                     }
                     if (batch_buffer.size() >= batchSize){                                                // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
