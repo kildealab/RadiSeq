@@ -107,8 +107,8 @@ void InduceSeq::set_genome_data(std::string& tempFolderPath) {
     std::string genomeTemplatePath = tempFolderPath+"/genome_spaceless.fa";                                       
     genome_fasta_size = static_cast<size_t>(ref_genomeFile_size*2);                                           // The size of an Undamaged file is estimated to be 2 times the size of the reference sequence file
     genome_fasta = createMemoryMappedFile(genomeTemplatePath, genome_fasta_size);                                     // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
-    buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes, *sdd_data.get_chrom_size_bp());
-    if (calculateCumChromHeaderSizes(cum_chrom_header_sizes, chrom_headers, genome_fasta, *sdd_data.get_chrom_end_loc())) {
+    buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes);
+    if (calculateCumChromHeaderSizes(cum_chrom_header_sizes, chrom_headers, genome_fasta, genome_fasta_size, *sdd_data.get_chrom_end_loc())) {
         std::cerr<<"\n ERROR: The chromosome sizes listed in the sdd file do not match the chromosome sizes in the genome fasta file " << parameter.get_reference_genome();
         exit(EXIT_FAILURE);
     }
