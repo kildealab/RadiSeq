@@ -34,6 +34,7 @@ private:
 
     std::vector<std::vector<std::vector<long>>> dsb_locations;                       // Stores double strand breaks. First index is groupTID, each element is a list of [backbone1_site, backbone2_site, chrom indx]. chrom indx starts from 0, 1, 2, ...
     std::vector<std::vector<std::vector<long>>> dsb_blunted_ends;                    // Stores blunted DSB ends. First index is groupTID
+    std::vector<int> n_dsb_blunted_ends;                                              // Total number of blunted DSB ends found, indexed by groupTID
     std::vector<std::vector<std::vector<long>>> dsb_fragments_left;                  // Stores left DSB fragments. First index is groupTID
     std::vector<std::vector<std::vector<long>>> dsb_fragments_right;                 // Stores right DSB fragments. First index is groupTID
     std::vector<std::vector<std::vector<long>>> dsb_strands_left;                    // Stores left DSB strands. First index is groupTID

@@ -1,0 +1,27 @@
+SDD Version, SDDv1.0;
+Software, TOPAS-nBio;
+Author, Name;
+Simulation Details, Nucleus simulation;
+Source, Monoenergetic source;
+Source type, 1;
+Incident particles, ;
+Mean particle energy, 0.500000 MeV;
+Energy distribution, M, 0;
+Particle fraction, 1.0;
+Dose or fluence, 1, 5e-13;
+Irradiation target, Nucleus;
+Volumes, 0,5,5,5,0,0,0,1,4.65,4.65,4.65,0,0,0;
+Chromosome sizes, 46,249.250621,135.534747,135.006516,133.851895,115.169878,107.349540,102.531392,90.354753,81.195210,78.077248,59.128983,243.199373,63.025520,48.129895,51.304566,198.022430,191.154276,180.915260,171.115067,159.138663,146.364022,141.213431,249.250621,135.534747,135.006516,133.851895,115.169878,107.349540,102.531392,90.354753,81.195210,78.077248,59.128983,243.199373,63.025520,48.129895,51.304566,198.022430,191.154276,180.915260,171.115067,159.138663,146.364022,141.213431,155.270560,59.373566;
+DNA Density, 14.4316;
+Cell Cycle Phase, 0, 1;
+DNA Structure, 0, 1;
+In vitro / in vivo, 0;
+Proliferation status, 1;
+Microenvironment, 20, 0.01;
+Damage definition, 1, 0, 10, 10, 17.5;
+Time, 0.000000;
+Damage and primary count, 0, 0;
+Data entries, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0;
+Additional information, ;
+***EndOfHeader***;
+

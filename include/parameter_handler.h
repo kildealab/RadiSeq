@@ -67,6 +67,7 @@ class NGSParameters{
     std::string induce_seq_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
     std::string induce_seq_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
     bool is_output_sequenced_dsbs{true};                                         // True if user wishes to output the DSBs that were sequenced in induce_seq
+    std::string induce_seq_genome_fasta_path;                                    // Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq, to avoid rebuilding it every run
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -221,6 +222,9 @@ public:
 
     void set_output_sequenced_dsbs(std::string*, std::string*);              // function to set "is_output_sequenced_dsbs"
     bool get_output_sequenced_dsbs();                                        // function to get "is_output_sequenced_dsbs"
+
+    void set_induce_seq_genome_fasta_path(std::string*);                     // function to set 'induce_seq_genome_fasta_path'
+    const std::string* get_induce_seq_genome_fasta_path();                   // function to get 'induce_seq_genome_fasta_path'
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

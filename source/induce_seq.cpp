@@ -21,6 +21,10 @@ InduceSeq::InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string temp
     parameter = parameters;
     set_genome_data(tempFolderPath);
     set_fragment_size_distribution_from_file();
+
+    // Initialize parameters for read generation. GC_binSize and fraction_nonFR_read_pairs are not used for Induce Seq, but are neaded as parameters for the function 
+    ART::initiate_read_generation(parameter.get_read_length(), parameter.get_GC_binSize(), parameter.get_fraction_nonFR_read_pairs(), parameter.get_read_artifacts_rate());
+    ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
 }
 
 // Reads the DNA fragment size distribution file (same "length count" format as fragment_size_distribution_path)
@@ -58,6 +62,9 @@ void InduceSeq::init_set_data_holders(int nGroupThreads){
 
     dsb_blunted_ends.clear();
     dsb_blunted_ends.resize(nGroupThreads);
+
+    n_dsb_blunted_ends.clear();
+    n_dsb_blunted_ends.resize(nGroupThreads);
 
     dsb_fragments_left.clear();
     dsb_fragments_left.resize(nGroupThreads);
@@ -100,14 +107,26 @@ void InduceSeq::run_simulation(int cell_number, int groupTID, int threadID, int 
 }
 
 // Creates a fasta file containing the genome data in a particular format, as described in buildUndamagedGenomeTemplate_ForwardOnly_MM
-// Saves this file in tempFolderPath. Sets genome_fasta to point to the first character of the memory map of the fasta file. 
-// Initializes cum_chrom_header_sizes and chrom_headers (described in the header file) 
+// If induce_seq_genome_fasta_path is set and points to an existing file, that previously-built file is loaded instead of
+// rebuilding it. If it is set but the file does not exist yet, the file is built and saved to that path (instead of
+// tempFolderPath) so that it can be re-used by later runs. If it is unset (default), the file is built fresh in
+// tempFolderPath, as before. Sets genome_fasta to point to the first character of the memory map of the fasta file.
+// Initializes cum_chrom_header_sizes and chrom_headers (described in the header file)
 void InduceSeq::set_genome_data(std::string& tempFolderPath) {
-    long ref_genomeFile_size = fileSize_bytes(*parameter.get_reference_genome());                              
-    std::string genomeTemplatePath = tempFolderPath+"/genome_spaceless.fa";                                       
-    genome_fasta_size = static_cast<size_t>(ref_genomeFile_size*2);                                           // The size of an Undamaged file is estimated to be 2 times the size of the reference sequence file
-    genome_fasta = createMemoryMappedFile(genomeTemplatePath, genome_fasta_size);                                     // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
-    buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes);
+    std::string empty_path = "\"\"";                                                                          // Sentinel value that marks an unset path-type parameter, as read from the default parameter file
+    const std::string& savedGenomeFastaPath = *parameter.get_induce_seq_genome_fasta_path();
+    bool pathIsSet = (savedGenomeFastaPath != empty_path);
+
+    if (pathIsSet && checkFileExists(&savedGenomeFastaPath)) {
+        genome_fasta = generateInputFileMemoryMap(savedGenomeFastaPath, genome_fasta_size);                    // Load the previously saved genome fasta memory-map instead of rebuilding it
+    } else {
+        long ref_genomeFile_size = fileSize_bytes(*parameter.get_reference_genome());
+        std::string genomeTemplatePath = pathIsSet ? savedGenomeFastaPath : tempFolderPath+"/genome_spaceless.fa";
+        genome_fasta_size = static_cast<size_t>(ref_genomeFile_size*2);                                        // The size of an Undamaged file is estimated to be 2 times the size of the reference sequence file
+        genome_fasta = createMemoryMappedFile(genomeTemplatePath, genome_fasta_size);                          // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
+        buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes);
+    }
+
     if (calculateCumChromHeaderSizes(cum_chrom_header_sizes, chrom_headers, genome_fasta, genome_fasta_size, *sdd_data.get_chrom_end_loc())) {
         std::cerr<<"\n ERROR: The chromosome sizes listed in the sdd file do not match the chromosome sizes in the genome fasta file " << parameter.get_reference_genome();
         exit(EXIT_FAILURE);
@@ -131,10 +150,6 @@ void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
     //go through backbone breaks, checking for dsbs.  
     while (site1 != backbone1_breaks.end() && site2 != backbone2_breaks.end()){
         int siteDiff = *site1 - *site2;                                                                 // separation in number of bp
-        // #pragma omp critical 
-        // {
-        //     std::cout << "site 1: " << *site1 << ",  site 2: " << *site2 << "\n";
-        // }
 		bool isDSB{0};                                                                                  // initiating with zero
         long chromIdx1;
         if(abs(siteDiff) <= DSBthreshold){
@@ -145,7 +160,6 @@ void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
         }
 
         if(isDSB){
-            // std::cout << "loc: " << *site1 << "\n";
             // save dsb to data vector
             dsb_locations[groupTID].push_back({*site1, *site2, chromIdx1, prevStepDSB});
 
@@ -184,15 +198,6 @@ void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
         }
         prevStepDSB = isDSB;
     }
-
-    // const auto& dsbs = dsb_locations[groupTID];
-    // std::cout << "DSB locations for groupTID=" << groupTID << " (" << dsbs.size() << " DSBs):\n";
-    // for (size_t i = 0; i < dsbs.size(); i++) {
-    //     std::cout << "  [" << i << "] backbone1=" << dsbs[i][0]
-    //               << "  backbone2=" << dsbs[i][1]
-    //               << "  chrom="    << dsbs[i][2]
-    //               << "  prevDSB="  << dsbs[i][3] << "\n";
-    // }
 }
 
 void InduceSeq::close() {
@@ -223,14 +228,7 @@ void InduceSeq::get_blunted_ends(int groupTID) {
             dsb_blunted_ends[groupTID].push_back(new_dsb_blunted_ends);
         }
     }
-
-    // const auto& blunted = dsb_blunted_ends[groupTID];
-    // std::cout << "Blunted ends for groupTID=" << groupTID << " (" << blunted.size() << " entries):\n";
-    // for (size_t i = 0; i < blunted.size(); i++) {
-    //     std::cout << "  [" << i << "] left=" << blunted[i][0]
-    //               << "  right=" << blunted[i][1]
-    //               << "  chrom=" << blunted[i][2] << "\n";
-    // }
+    n_dsb_blunted_ends[groupTID] = static_cast<int>(dsb_blunted_ends[groupTID].size());
 }
 
 //DDDD
@@ -269,7 +267,7 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
         if (fragment_length > 1 && !skip_this_left_fragment) {
             long left_start = dsb_blunted_end[0];
             long left_end = left_start - fragment_length + 1;
-            int chrom_start = (*sdd_data.get_chrom_end_loc())[chrom_idx] + 1;
+            long chrom_start = (*sdd_data.get_chrom_end_loc())[chrom_idx] + 1;
             bool drop_current_left = false;
             if (left_end < chrom_start) {
                 left_end = chrom_start;
@@ -305,8 +303,7 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
         long right_end = right_start + fragment_length - 1;
         bool right_appended = false;
         if (fragment_length > 1) {
-            int chrom_end = (*sdd_data.get_chrom_end_loc())[chrom_idx + 1];
-            // std::cout << "chrom end: " <<chrom_end << "  right_end: " << right_end << "\n";
+            long chrom_end = (*sdd_data.get_chrom_end_loc())[chrom_idx + 1];
             if (right_end > chrom_end) right_end = chrom_end;
 
             // Check whether this right fragment runs into the next dsb's left blunted end (plus the adapter length).
@@ -335,21 +332,6 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
 
         i++;
     }
-
-    // const auto& frags_left  = dsb_fragments_left[groupTID];
-    // const auto& frags_right = dsb_fragments_right[groupTID];
-    // std::cout << "DSB fragments left for groupTID=" << groupTID << " (" << frags_left.size() << " entries):\n";
-    // for (size_t j = 0; j < frags_left.size(); j++) {
-    //     std::cout << "  [" << j << "] start=" << frags_left[j][0]
-    //               << "  end="   << frags_left[j][1]
-    //               << "  chrom=" << frags_left[j][2] << "\n";
-    // }
-    // std::cout << "DSB fragments right for groupTID=" << groupTID << " (" << frags_right.size() << " entries):\n";
-    // for (size_t j = 0; j < frags_right.size(); j++) {
-    //     std::cout << "  [" << j << "] start=" << frags_right[j][0]
-    //               << "  end="   << frags_right[j][1]
-    //               << "  chrom=" << frags_right[j][2] << "\n";
-    // }
 }
 
 
@@ -522,9 +504,6 @@ void InduceSeq::find_base_pair_damages(int groupTID) {
 
 
 void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int num_available_threads, int threadIDOffset) {
-    
-    ART::initiate_read_generation(parameter.get_read_length(), parameter.get_GC_binSize(), parameter.get_fraction_nonFR_read_pairs(), parameter.get_read_artifacts_rate());
-    ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
 
     // ofstream object of the output fastq file for read 1
     std::string output_file_ending;
@@ -548,7 +527,16 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
         sequenced_dsbs_file.open(output_sequenced_dsbs_filename.c_str());
         sequenced_dsbs_file << "fragment_start,fragment_end,chromosome_index,is_left,strand1_damage_location,strand2_damage_location,read_number\n";
     }
-    
+
+    // ofstream object of the output file recording per-cell simulation statistics. Written here, before the
+    // parallel read-generation loop below, since this is a single row per cell (not per-thread), so writing
+    // it in this single-threaded part of the function avoids any race between threads.
+    std::string output_simulation_data_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_simulation_data.csv";
+    std::ofstream simulation_data_file(output_simulation_data_filename.c_str());
+    simulation_data_file << "cell_number,n_dsb_blunted_ends\n";
+    simulation_data_file << cell_number << "," << n_dsb_blunted_ends[groupTID] << "\n";
+    simulation_data_file.close();
+
     ART read1;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
     read1.set_read_error_rates(parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
     read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
@@ -597,7 +585,6 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
         }
 
         get_dna_sequence(dna_seq, bp_damages, dsb_strand, is_left);
-        // std::cout << dna_seq << "\n";
         read1.generate_read_with_indel_from_frag(dna_seq, threadID);                                   // Make a read with random indel errors
         std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
         read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
@@ -611,7 +598,6 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
             read_data += static_cast<char>(read1_quality_score_vec[k]+32);          // +33 to get the phred score
         }
         read_data += "\n";
-        // std::cout<< read_data;
 
         batch_buffer[localTID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread
 

@@ -10,7 +10,6 @@
 // Default constructor
 NGSParameters::NGSParameters(){
     dsb_threshold = 10;
-    P5_adapter_length = 58;
     first_size_filter = 150;
     maximum_overlap_fragment_generation = 0.4;
     default_parameter_file_name = "/NGSDefaultParameters.txt";
@@ -206,6 +205,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "output_sequenced_dsbs"){
         set_output_sequenced_dsbs(paramName, paramValue);
     }
+    else if (*paramName == "induce_seq_genome_fasta_path"){
+        set_induce_seq_genome_fasta_path(paramValue);
+    }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
         <<" ----- This parameter will be ignored -----\n";
@@ -296,6 +298,9 @@ void NGSParameters::set_induce_seq_fragment_size_distribution_path(std::string* 
     }else{
         induce_seq_fragment_size_distribution_path = *paramValue;
     }
+}
+void NGSParameters::set_induce_seq_genome_fasta_path(std::string* paramValue){
+    induce_seq_genome_fasta_path = *paramValue;
 }
 void NGSParameters::set_output_sequenced_dsbs(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
@@ -552,6 +557,9 @@ const std::string* NGSParameters::get_induce_seq_fragment_size_distribution_path
 }
 bool NGSParameters::get_output_sequenced_dsbs(){
     return(is_output_sequenced_dsbs);
+}
+const std::string* NGSParameters::get_induce_seq_genome_fasta_path(){
+    return(&induce_seq_genome_fasta_path);
 }
 const std::string* NGSParameters::get_sequencer(){
     return(&sequencer);

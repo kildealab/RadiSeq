@@ -103,3 +103,9 @@ induce_seq_fragment_size_distribution_path  = default                 # Path to 
                                                                       # Default path is hard-coded (FragmentSizeDist_induceSeq.txt), but user can change.
 
 output_sequenced_dsbs                       = True                   # "True" if user wishes to output the DSBs that were sequenced in induce_seq
+
+induce_seq_genome_fasta_path                = ""                      # Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq.
+                                                                      # If empty, it is built fresh in the temp folder each run. If set and the file exists, it is loaded instead of rebuilt.
+                                                                      # If set and the file does not exist, it is built and saved to this path for reuse in future runs.
+
+P5_adapter_length                           = 58                      # Length of the P5 adapter/primer (in bp), used when filtering DSB fragments in induce_seq

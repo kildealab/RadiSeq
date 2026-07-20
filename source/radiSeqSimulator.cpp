@@ -74,7 +74,7 @@ int main(int argc, char* argv[]){
         std::string genomeTemplatePath = tempFolderPath+"/Undamaged_cell.fa";                                       // Name of the undamaged fasta file template
         templateSize = static_cast<size_t>(ref_genomeFile_size*4);                                                  // The size of an Undamaged file is estimated to be 4 times the size of the reference sequence file
         genomeTemplate_data = createMemoryMappedFile(genomeTemplatePath,templateSize);                              // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
-
+        
         // Build the UndamagedGenomeTemplate file and the memory map
         ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome(), ref_chrm_weights, &average_GC_content, parameters.get_GC_binSize());
         long one_fasta_size = fileSize_bytes(tempFolderPath+"/Undamaged_cell.fa");                                  // Calculate the size of the undamaged cell fasta file. This will be the size of every fasta file
@@ -274,5 +274,5 @@ int main(int argc, char* argv[]){
         }
     }    
     // Remove the temporary directory (temp) that stores the fasta file once processing is done
-    remove_directory(tempFolderPath); 
+    // remove_directory(tempFolderPath); 
 }

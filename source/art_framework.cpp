@@ -711,6 +711,7 @@ void ART::generate_chimeric_read(std::string& read, int threadID){
 // based on the indel map. Function takes threadID as an argument to make it thread safe
 //--------------------------------------------------------------------------------------------
 void ART::read_maker(std::string& read_template_seq, int threadID){
+    // AAAA implement reads into adapters
     std::string& read_seq = read_seq_vec[threadID];                                                     // Pass the respective read_seq place holder for each thread by reference
     std::map<int,char,std::less<int>>& indel_map = indel_map_vec[threadID];                             // Pass the respective indel map of the thread by reference
     read_seq.clear();
@@ -720,7 +721,11 @@ void ART::read_maker(std::string& read_template_seq, int threadID){
     }
     int k{0};
     size_t template_length = read_length;
-    for(size_t i=0; i<template_length;){
+    // read_template_seq is normally at least template_length long (chromosome segments are always far
+    // longer than a read), but induce_seq's DSB fragments can be shorter than read_length: bound i by
+    // the template's actual length too, so a short fragment yields a correspondingly shorter (truncated)
+    // read instead of reading past the end of read_template_seq.
+    for(size_t i=0; i<template_length && i<read_template_seq.length();){
         if(indel_map.count(k) == 0){                                                                    // For a base location that was unaltered, obtain the base from the chromosome sequence
             read_seq.push_back(read_template_seq[i]); i++; k++; 
         }else if(indel_map[k] == '-'){                                                                  // If the base location corresponds to a deletion, ignore that base
