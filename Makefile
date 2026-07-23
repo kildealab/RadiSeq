@@ -19,11 +19,16 @@ OBJ_DIR = objects
 # -I$(INC_DIR) Include files from INC_DIR when compiling
 
 # Determine the C++17 standard flag based on the compiler
+# -fno-strict-aliasing: this codebase does a lot of raw pointer manipulation over
+# memory-mapped files (mmap'd char* buffers reinterpreted/walked as different logical
+# records), which isn't strict-aliasing-safe. Under -O3 this reliably miscompiled
+# InduceSeq's genome-processing path (corrupting unrelated heap memory well after the
+# fact); confirmed via bisection across -O0/-O1/-O2/-O3 and fixed by this flag alone.
 COMPILER := $(shell $(CPP) -dM -E - < /dev/null | grep __clang__)
 ifneq ($(COMPILER),)
-    CXXFLAGS = -c -Wall -O3 -g -std=c++1z -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++1z -fopenmp -I$(INC_DIR)
 else
-    CXXFLAGS = -c -Wall -O3 -g -std=c++17 -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++17 -fopenmp -I$(INC_DIR)
 endif
 
 LDFLAGS = -fopenmp -lz

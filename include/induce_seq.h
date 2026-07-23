@@ -20,6 +20,7 @@ public:
     void find_DSBs(int DSBthreshold, int groupTID);                                  // function to find DSBs from backbone breaks on opposite strands within a threshold and on the same chromosome
     void get_blunted_ends(int groupTID);                                             // function to determine blunted ends from the DSB locations
     void get_dsb_fragments(int groupTID, int threadID);                              // function to get the DSB fragments from the blunted ends
+    void filter_dsb_fragments(int groupTID, int threadID);                          // function to filter dsb_fragments_left/right by fragment size, using probability_of_sequencing_function, called after get_dsb_fragments
     void filter_dsb_strands_ssd(int groupTID);                                       // function to filter DSB strands by single-strand damage
     void find_base_pair_damages(int groupTID);                                       // function to find base pair damages on the DSB strands
     void get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_damages, std::vector<long>& dsb_strand, bool is_left);  // function to extract the DNA sequence for a DSB strand from the genome
@@ -31,6 +32,7 @@ public:
 
 private:
     void set_fragment_size_distribution_from_file();                                 // function to read the induce_seq fragment size distribution file and populate fragment_size_distribution
+    void set_probability_of_keeping_from_file();                                     // function to read the induce_seq probability of sequencing file and populate probability_of_sequencing_function
 
     std::vector<std::vector<std::vector<long>>> dsb_locations;                       // Stores double strand breaks. First index is groupTID, each element is a list of [backbone1_site, backbone2_site, chrom indx]. chrom indx starts from 0, 1, 2, ...
     std::vector<std::vector<std::vector<long>>> dsb_blunted_ends;                    // Stores blunted DSB ends. First index is groupTID
@@ -42,12 +44,14 @@ private:
     std::vector<std::vector<std::vector<long>>> base_pair_damages_left;              // Stores base pair damages on the left DSB strands. First index is groupTID
     std::vector<std::vector<std::vector<long>>> base_pair_damages_right;             // Stores base pair damages on the right DSB strands. First index is groupTID
     std::map<float, int> fragment_size_distribution{{0.2f, 5}, {0.6f, 6}, {1.0f, 7}};
+    std::map<int, double> probability_of_sequencing_function;                          // Length -> probability of keeping (retaining) a fragment of that length, read from the induce_seq probability of sequencing file
     NGSParameters parameter;                                                         // Holds the simulation parameters
     NGSsdd& sdd_data;                                                                // Reference to the shared NGSsdd instance holding genome/backbone break data
     char* genome_fasta{nullptr};                                                     // Path to the reference genome FASTA file
     size_t genome_fasta_size{0};                                                     // Size in bytes of the genome_fasta memory map
     std::vector<int> cum_chrom_header_sizes;                                         // Cumulative chromosome header sizes
     std::vector<std::string> chrom_headers;                                          // Chromosome headers, excluding the trailing '\n'
+    std::string P7_adapter_sequence;                                                 // P7 adapter sequence, appended to a read (with any 'I' placeholders replaced by random bases) when its DSB fragment is shorter than the read length
 
 
     int second_size_filter{3};                                                       // Second size filter threshold

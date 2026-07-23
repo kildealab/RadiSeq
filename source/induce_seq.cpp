@@ -21,6 +21,8 @@ InduceSeq::InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string temp
     parameter = parameters;
     set_genome_data(tempFolderPath);
     set_fragment_size_distribution_from_file();
+    set_probability_of_keeping_from_file();
+    P7_adapter_sequence = *parameter.get_P7_adapter_sequence();
 
     // Initialize parameters for read generation. GC_binSize and fraction_nonFR_read_pairs are not used for Induce Seq, but are neaded as parameters for the function 
     ART::initiate_read_generation(parameter.get_read_length(), parameter.get_GC_binSize(), parameter.get_fraction_nonFR_read_pairs(), parameter.get_read_artifacts_rate());
@@ -42,6 +44,13 @@ void InduceSeq::set_fragment_size_distribution_from_file() {
         cumulative_probability += normalized_counts[i];                            // Running sum of the normalized counts turns the PMF into a CDF
         fragment_size_distribution[static_cast<float>(cumulative_probability)] = min_fragment_length + static_cast<int>(i);
     }
+}
+
+// Reads the induce_seq probability-of-sequencing file (see readProbabilityOfSequencing) from the path
+// set by the induce_seq_probability_of_sequencing_path parameter, and stores it as a length -> probability
+// lookup, probability_of_sequencing_function.
+void InduceSeq::set_probability_of_keeping_from_file() {
+    probability_of_sequencing_function = readProbabilityOfSequencing(parameter.get_induce_seq_probability_of_sequencing_path());
 }
 
 
@@ -101,6 +110,7 @@ void InduceSeq::run_simulation(int cell_number, int groupTID, int threadID, int 
     find_DSBs(parameter.get_dsb_threshold(), groupTID);
     get_blunted_ends(groupTID);
     get_dsb_fragments(groupTID, threadID);
+    filter_dsb_fragments(groupTID, threadID);
     filter_dsb_strands_ssd(groupTID);
     find_base_pair_damages(groupTID);
     generate_simulation_output(cell_number, groupTID, NumWorkerThreads, threadIDOffset);
@@ -232,7 +242,6 @@ void InduceSeq::get_blunted_ends(int groupTID) {
 }
 
 //DDDD
-//AAAA add edge cases dsb near each other
 void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
     dsb_fragments_left[groupTID].clear();
     dsb_fragments_right[groupTID].clear();
@@ -285,15 +294,13 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
                     long merged_end = static_cast<long>(0.5 * (left_end + previous_right_end));
                     left_end = merged_end;
 
-                    // Re-check and re-push the previous right fragment with its new (shortened) end
+                    // Re-push the previous right fragment with its new (shortened) end
                     dsb_fragments_right[groupTID].pop_back();
-                    if (merged_end - previous_right_start + parameter.get_P5_adapter_length() + 1 >= parameter.get_first_size_filter()) {
-                        dsb_fragments_right[groupTID].push_back({previous_right_start, merged_end, previous_chrom_idx, previous_right_dsb_strand1, previous_right_dsb_strand2});
-                    }
+                    dsb_fragments_right[groupTID].push_back({previous_right_start, merged_end, previous_chrom_idx, previous_right_dsb_strand1, previous_right_dsb_strand2});
                 }
             }
 
-            if (!drop_current_left && left_start - left_end + parameter.get_P5_adapter_length() + 1 >= parameter.get_first_size_filter()) {
+            if (!drop_current_left) {
                 dsb_fragments_left[groupTID].push_back({left_start, left_end, chrom_idx, left_dsb_strand1, left_dsb_strand2});
             }
         }
@@ -317,7 +324,7 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
                 }
             }
 
-            if (!overlaps_next_dsb && right_end - right_start + parameter.get_P5_adapter_length() + 1 >= parameter.get_first_size_filter()) {
+            if (!overlaps_next_dsb) {
                 dsb_fragments_right[groupTID].push_back({right_start, right_end, chrom_idx, right_dsb_strand1, right_dsb_strand2});
                 right_appended = true;
             }
@@ -333,6 +340,52 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
         i++;
     }
 }
+
+// Filters dsb_fragments_left/right[groupTID], first by a flat probability_of_sequencing_multiplier
+// chance (independent of fragment size) that a fragment doesn't survive sequencing, then by fragment
+// size: for each remaining fragment, looks up its keep probability in probability_of_sequencing_function
+// (a length -> probability map, indexed by fragment length alone, not including the P5 adapter). If
+// the fragment size is larger than the largest size in the map, the largest size's probability is used instead.
+// The fragment is then removed with probability (1 - keep probability). The size-based filtering was
+// previously a hard first_size_filter cutoff done inline in get_dsb_fragments; it is split out here so
+// get_dsb_fragments only handles fragment generation.
+void InduceSeq::filter_dsb_fragments(int groupTID, int threadID) {
+    std::vector<std::vector<long>>& left_fragments = dsb_fragments_left[groupTID];
+    std::vector<std::vector<long>>& right_fragments = dsb_fragments_right[groupTID];
+
+    // Flat (size-independent) chance that a fragment doesn't survive sequencing, applied before the
+    // size-dependent filtering below.
+    double keep_probability_flat = parameter.get_probability_of_sequencing_multiplier();
+    auto should_remove_flat = [threadID, keep_probability_flat](const std::vector<long>&) {
+        return rng::rand_double(0.0, 1.0, threadID) >= keep_probability_flat;
+    };
+    left_fragments.erase(std::remove_if(left_fragments.begin(), left_fragments.end(), should_remove_flat), left_fragments.end());
+    right_fragments.erase(std::remove_if(right_fragments.begin(), right_fragments.end(), should_remove_flat), right_fragments.end());
+
+    int largest_tabulated_size = probability_of_sequencing_function.rbegin()->first;
+
+    auto should_remove = [this, threadID, largest_tabulated_size](long size) {
+        double keep_probability = (size > largest_tabulated_size)
+            ? probability_of_sequencing_function.rbegin()->second
+            : probability_of_sequencing_function.lower_bound(size)->second;
+        return rng::rand_double(0.0, 1.0, threadID) >= keep_probability;
+    };
+
+    left_fragments.erase(
+        std::remove_if(left_fragments.begin(), left_fragments.end(), [this, &should_remove](const std::vector<long>& frag) {
+            return should_remove(frag[0] - frag[1] + 1);
+        }),
+        left_fragments.end()
+    );
+
+    right_fragments.erase(
+        std::remove_if(right_fragments.begin(), right_fragments.end(), [this, &should_remove](const std::vector<long>& frag) {
+            return should_remove(frag[1] - frag[0] + 1);
+        }),
+        right_fragments.end()
+    );
+}
+
 
 
 
@@ -585,12 +638,11 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
         }
 
         get_dna_sequence(dna_seq, bp_damages, dsb_strand, is_left);
-        read1.generate_read_with_indel_from_frag(dna_seq, threadID);                                   // Make a read with random indel errors
+        read1.generate_read_with_indel_from_frag(dna_seq, P7_adapter_sequence, threadID);               // Make a read with random indel errors
         std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
         read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
         read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
         
-        //BBBB
         std::string chromID = chrom_headers[dsb_strand[2]];                  
         std::string read_data = "@"+chromID+"_read"+std::to_string(i)+"\n";                           // @readID
         read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +

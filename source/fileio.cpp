@@ -335,7 +335,41 @@ std::pair<int, std::vector<double>> readFragmentSizeDist(const std::string* file
         normalized_counts.push_back(static_cast<double>(fragment.second)/total_count);                  // Re-normalize the fragment counts
     }
     return {min_fragment_length, normalized_counts};                                                    // Return the minimum fragment length and the normalized fragment counts
-}   
+}
+//------------------------------------------------------------------------------------------------------------------------
+
+
+
+//------------------------------------------------------------------------------------------------------------------------
+// Reads a fragment-length -> probability CSV file (a header row, followed by "length,probability"
+// rows) and returns the values as a length -> probability lookup map. Unlike readFragmentSizeDist,
+// the values in this file are already probabilities and are stored as-is, with no normalization.
+//------------------------------------------------------------------------------------------------------------------------
+std::map<int, double> readProbabilityOfSequencing(const std::string* filename){
+    std::ifstream file(*filename);
+    std::map<int, double> probability_of_sequencing;
+    std::string lineData;
+
+    std::getline(file, lineData);                                                                     // Skip the header row
+
+    while(std::getline(file, lineData)){
+        if (lineData.empty() || lineData=="\r"){
+            continue;
+        }
+        std::size_t commaPos = lineData.find(',');
+        int length = std::stoi(lineData.substr(0, commaPos));
+        double probability = std::stod(lineData.substr(commaPos+1));
+        probability_of_sequencing[length] = probability;
+    }
+    file.close();
+
+    if (probability_of_sequencing.empty()){
+        std::cerr <<"\n ERROR: No data found in the probability of sequencing file provided : "<<*filename<<"\n";
+        exit(EXIT_FAILURE);
+    }
+
+    return(probability_of_sequencing);
+}
 //------------------------------------------------------------------------------------------------------------------------
 
 

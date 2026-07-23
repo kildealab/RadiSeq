@@ -56,7 +56,7 @@ public:
     static bool MDA_distribution_maker(long, double);                                                   // Function to create the coverage distribution profile for MDA for each cell
     
     void generate_read_with_indel(int);                                                                 // Function that that ultimately call all subfunctions to generate a read with indel damages
-    void generate_read_with_indel_from_frag(std::string&, int);                                         // Function to generate a read with indel damages from a given DNA fragment sequence
+    void generate_read_with_indel_from_frag(std::string&, const std::string&, int);                      // Function to generate a read with indel damages from a given DNA fragment sequence
     int get_indel_map(int);                                                                             // Function to generate an indel distribution map for a read
     int get_balanced_indel_map(int);                                                                    // Function to generate an indel distribution map that will have deletions <= insertions
     void generate_chimeric_read(std::string&, int);

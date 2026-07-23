@@ -102,6 +102,11 @@ induce_seq                                  = False                   # "True" i
 induce_seq_fragment_size_distribution_path  = default                 # Path to the file containing the DNA fragment size distribution used when induce_seq is True.
                                                                       # Default path is hard-coded (FragmentSizeDist_induceSeq.txt), but user can change.
 
+induce_seq_probability_of_sequencing_path   = default                 # Path to the file containing the probability of sequencing (retaining) a fragment, indexed by fragment length, used when induce_seq is True.
+                                                                      # Default path is hard-coded (induce_seq_probability_of_sequencing.csv), but user can change.
+
+probability_of_sequencing_multiplier        = 0.94                   # Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used when induce_seq is True.
+
 output_sequenced_dsbs                       = True                   # "True" if user wishes to output the DSBs that were sequenced in induce_seq
 
 induce_seq_genome_fasta_path                = ""                      # Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq.
@@ -109,3 +114,6 @@ induce_seq_genome_fasta_path                = ""                      # Optional
                                                                       # If set and the file does not exist, it is built and saved to this path for reuse in future runs.
 
 P5_adapter_length                           = 58                      # Length of the P5 adapter/primer (in bp), used when filtering DSB fragments in induce_seq
+
+P7_adapter_sequence                         = CAAGCAGAAGACGGCATACGAGATIIIIIIGTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT  # P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used when induce_seq is True.
+                                                                      # 'I' characters are placeholders replaced with random bases at read-generation time.

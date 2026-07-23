@@ -62,12 +62,16 @@ class NGSParameters{
     bool is_compress_output{false};                                              // True if the user wishes to compress the output FASTQ files (gzip)
     bool is_induce_seq{false};                                                   // True if the user wishes to induce sequencing errors/artifacts
     int P5_adapter_length;                                                       // Length of the P5 adapter/primer, used when filtering DSB fragments in induce_seq
+    std::string P7_adapter_sequence;                                             // P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used in induce_seq
     int first_size_filter;                                                       // First size filter threshold, used when filtering DSB fragments in induce_seq
     double maximum_overlap_fragment_generation;                                  // Max fraction of the gap between two DSBs that their fragments may overlap by, used in induce_seq
     std::string induce_seq_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
     std::string induce_seq_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
     bool is_output_sequenced_dsbs{true};                                         // True if user wishes to output the DSBs that were sequenced in induce_seq
     std::string induce_seq_genome_fasta_path;                                    // Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq, to avoid rebuilding it every run
+    std::string induce_seq_probability_of_sequencing_file_name;                  // Hard-coded default file name for the induce_seq probability of sequencing data
+    std::string induce_seq_probability_of_sequencing_path;                       // Path to the file containing the probability of sequencing (by fragment length) used in induce_seq
+    double probability_of_sequencing_multiplier;                                 // Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used in induce_seq
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -211,6 +215,9 @@ public:
     void set_P5_adapter_length(std::string*);                                    // function to set the P5 adapter/primer length
     int get_P5_adapter_length();                                                 // function to get the P5 adapter/primer length
 
+    void set_P7_adapter_sequence(std::string*);                                  // function to set the P7 adapter sequence
+    const std::string* get_P7_adapter_sequence();                                // function to get the P7 adapter sequence
+
     void set_first_size_filter(std::string*);                                    // function to set the first size filter threshold
     int get_first_size_filter();                                                 // function to get the first size filter threshold
 
@@ -225,6 +232,12 @@ public:
 
     void set_induce_seq_genome_fasta_path(std::string*);                     // function to set 'induce_seq_genome_fasta_path'
     const std::string* get_induce_seq_genome_fasta_path();                   // function to get 'induce_seq_genome_fasta_path'
+
+    void set_induce_seq_probability_of_sequencing_path(std::string*, std::string*);  // function to set 'induce_seq_probability_of_sequencing_path'
+    const std::string* get_induce_seq_probability_of_sequencing_path();              // function to get 'induce_seq_probability_of_sequencing_path'
+
+    void set_probability_of_sequencing_multiplier(std::string*, std::string*);    // function to set 'probability_of_sequencing_multiplier'
+    double get_probability_of_sequencing_multiplier();                           // function to get 'probability_of_sequencing_multiplier'
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters
