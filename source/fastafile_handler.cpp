@@ -213,7 +213,46 @@ int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::
 }
 
 //--------------------------------------------------------------------------------------------
-// This function will process the reference genome memory-map data provided and generate an 
+// Scans a genome fasta memory map built by buildUndamagedGenomeTemplate_ForwardOnly_MM (one
+// '>header\n' line followed by one single-line sequence per chromosome, optionally followed by
+// ' ' padding characters out to fasta_file_size) from the very start, independently of any
+// externally-supplied expected chromosome sizes, and (re)populates cum_chrom_header_sizes,
+// chrom_headers, and chrom_end_loc with the values actually found in the file. Used as a fallback
+// when calculateCumChromHeaderSizes finds that the SDD file's declared chromosome sizes don't
+// match the constructed genome fasta, so that downstream code can keep using the fasta's real
+// layout instead of the (incorrect) SDD-declared one. chrom_end_loc[0] is always 0 (matching
+// NGSsdd::chrom_end_loc's convention), and chrom_end_loc[i+1] is the cumulative bp length of
+// chromosomes 0..i.
+//--------------------------------------------------------------------------------------------
+void calculateActualChromEndLoc(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, std::vector<long>& chrom_end_loc, char* fasta_file, size_t fasta_file_size) {
+    cum_chrom_header_sizes.clear();
+    chrom_headers.clear();
+    chrom_end_loc.clear();
+    chrom_end_loc.push_back(0);
+
+    size_t pos = 0;
+    int cum_header = 0;
+    while (pos < fasta_file_size && fasta_file[pos] == '>') {
+        size_t header_start = pos;
+        while (pos < fasta_file_size && fasta_file[pos] != '\n') {                // Find the end of the header line
+            pos++;
+        }
+        chrom_headers.push_back(std::string(fasta_file + header_start, fasta_file + pos));    // Header text excluding the trailing '\n'
+        pos++;                                                                    // Step over the header's terminating '\n'
+        cum_header += static_cast<int>(pos - header_start);
+        cum_chrom_header_sizes.push_back(cum_header);
+
+        size_t seq_start = pos;
+        while (pos < fasta_file_size && fasta_file[pos] != '>' && fasta_file[pos] != ' ') {  // Sequence runs until the next header or the start of the trailing padding
+            pos++;
+        }
+        long seq_length = static_cast<long>(pos - seq_start) - 1;                 // -1 excludes the sequence's own terminating '\n'
+        chrom_end_loc.push_back(chrom_end_loc.back() + seq_length);
+    }
+}
+
+//--------------------------------------------------------------------------------------------
+// This function will process the reference genome memory-map data provided and generate an
 // undamaged cell genome template that will be further used to create damaged cell genomes. 
 // The template will have forward and complementary strand sequences. If the cell is diploid, 
 // then it will even have two copies of each strand. They will get IDs: copy1_chr1 and copy2_chr1

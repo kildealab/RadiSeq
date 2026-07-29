@@ -94,7 +94,7 @@ read2_deletion_error_rate                   = 0.00023                 # Specify 
 output_FASTQ_filename_prefix                = CELL                    # Prefix for the sequenced output FASTQ file (omit file extension)
 
 make_summary_report                         = True                    # "True" if user wishes to generate a summary report file at the end of run
-to the 
+
 compress_output                             = True                    # "True" if the user wishes to compress the output FASTQ files (gzip)
 
 induce_seq                                  = False                   # "True" if the user wishes to induce sequencing errors/artifacts
@@ -109,11 +109,15 @@ probability_of_sequencing_multiplier        = 0.94                   # Flat prob
 
 output_sequenced_dsbs                       = True                   # "True" if user wishes to output the DSBs that were sequenced in induce_seq
 
+generate_reads                              = True                   # "True" if user wishes to generate reads in induce_seq. If False, the genome FASTA is not
+                                                                      # built/loaded and no read output file is created. All other induce_seq output files (DSB
+                                                                      # locations, sequenced DSBs, per-cell simulation data) are still created.
+
 induce_seq_genome_fasta_path                = ""                      # Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq.
                                                                       # If empty, it is built fresh in the temp folder each run. If set and the file exists, it is loaded instead of rebuilt.
                                                                       # If set and the file does not exist, it is built and saved to this path for reuse in future runs.
 
 P5_adapter_length                           = 58                      # Length of the P5 adapter/primer (in bp), used when filtering DSB fragments in induce_seq
 
-P7_adapter_sequence                         = CAAGCAGAAGACGGCATACGAGATIIIIIIGTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT  # P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used when induce_seq is True.
-                                                                      # 'I' characters are placeholders replaced with random bases at read-generation time.
+P7_adapter_sequence                         = AGATCGGAAGAGCACACGTCTGAACTCCAGTCACIIIIIIATCTCGTATGCCGTCTTCTGCTTG  # P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used when induce_seq is True.
+                                                                      # 'I' characters are index placeholders replaced with random bases at read-generation time.

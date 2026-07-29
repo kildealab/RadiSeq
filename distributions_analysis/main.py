@@ -179,7 +179,7 @@ def compute_probability_of_keeping():
         return np.interp(L, ratio_bp, ratio_q)
 
     x = np.arange(1, 2001)
-    probability = r(x + 25 + 58) * r(x - 25 + 58 + 6) * 0.97**2
+    probability = r(x + 58 - 150 + 100) * r(x + 58 * 2 + 6 - 200 + 100) * 0.97**2
 
     with open(PROBABILITY_OF_KEEPING_CSV, "w", newline="") as f:
         writer = csv.writer(f)
@@ -188,15 +188,15 @@ def compute_probability_of_keeping():
             writer.writerow([int(b), round(float(p), 6)])
 
 
-def graph_probability_of_keeping():
-    """Loads and plots the probability_of_keeping distribution against fragment size."""
+def graph_probability_of_keeping(shift=0):
+    """Loads and plots the probability_of_keeping distribution against fragment size, shifted along the x axis by 'shift'."""
     bp, probability = load_distribution(PROBABILITY_OF_KEEPING_CSV)
 
-    plt.plot(bp, probability, color="teal")
+    plt.plot(bp + shift, probability, color="teal")
     plt.xscale("log")
     plt.xlabel("Size [bp]")
     plt.ylabel("Probability of keeping")
-    plt.title("Probability of keeping vs fragment size")
+    plt.title(f"Probability of keeping vs fragment size (shifted by {shift})" if shift else "Probability of keeping vs fragment size")
     plt.grid(True)
     plt.show()
 
@@ -409,12 +409,15 @@ def graph_with_parameters(shift, percent_shifted, percent_half_shifted, scale):
 if __name__ == "__main__":
     # graph_distributions(normalize=True)
     # graph_modified_before()
-    graph_modified_before_vs_old_dist()
+    # graph_modified_before_vs_old_dist()
     # graph_shifted(58 * 2 + 6, normalize=True, scale_after=0.77)
-    # graph_distributions(normalize=True)
+    # graph_distributions(normalize=False)
     # graph_shifted(58*2+6, scale_after=0.95)
     # graph_sheared_spri(scale_spri=0.67)
     # graph_spri_sheared_ratio(scale=0.67, window=101)
-    # graph_probability_of_keeping()
+    # graph_probability_of_keeping(shift=58*2 + 6)
+    # graph_spri_sheared_ratio(scale=0.67, window=101)
+    # compute_probability_of_keeping()
+    graph_probability_of_keeping(shift=58*2 + 6)
     # fit_parameters(58*2+6, initial_guess=(0.9, 0.05, 1))
     # graph_with_parameters(58*2+6, 0.5, 0.1, 0.95)

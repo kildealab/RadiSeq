@@ -1,11 +1,14 @@
 import json
 import os
+import re
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from parameters import RUN_RESULTS_FOLDER, FIGURES_FOLDER
+from parameters import RUN_RESULTS_FOLDER, FIGURES_FOLDER, FINAL_SDDS_RUN_RESULTS_FOLDER, FINAL_SDDS_GRAPHS_FOLDER
 from simulation_setup import _read_parameter_value
+
+_DSB_BLUNTED_ENDS_CSV_RE = re.compile(r"_(\d+)_dsb_blunted_ends\.csv$")      # Matches "*_<cell_number>_dsb_blunted_ends.csv" (from InduceSeq::save_dsb_blunted_ends)
 
 
 def _count_non_header_lines(csv_path):
@@ -180,5 +183,78 @@ def graph_n_reads_vs_n_ssbs(n_dsbs):
     plt.grid(True)
     plt.savefig(os.path.join(FIGURES_FOLDER, "n_dsb_blunted_ends_vs_n_ssbs.png"))
     plt.show()
+
+def _dsb_blunted_end_mean_positions(csv_path):
+    """
+    Returns a list of DSB locations from a *_dsb_blunted_ends.csv file (see
+    InduceSeq::save_dsb_blunted_ends): one location per data row, taken as the mean of that row's
+    left_edge_location and right_edge_location (the two ends of that blunted DSB).
+    """
+    locations = []
+    with open(csv_path, "r") as f:
+        f.readline()                                                        # Skip the header row
+        for line in f:
+            fields = line.strip().split(",")
+            if len(fields) < 2:
+                continue
+            left_edge, right_edge = int(fields[0]), int(fields[1])
+            locations.append((left_edge + right_edge) / 2)
+    return locations
+
+
+def generate_dsb_location_graphs(source_root=FINAL_SDDS_RUN_RESULTS_FOLDER, dest_root=FINAL_SDDS_GRAPHS_FOLDER):
+    """
+    Mirrors source_root's folder structure (Final_SDDs_runs_results by default) into dest_root,
+    except that at the level holding the individual numbered simulation folders (e.g.
+    Photon/6MeV_outer/0_5Gy/161, each containing a parameters.txt and, once run, an output/
+    folder), a single 'dsb_graphs' folder is created instead, holding one PNG per simulation
+    number.
+
+    For each numbered simulation folder found (any directory directly containing a
+    parameters.txt), reads that parameters.txt for its output_directory_path, then reads every
+    *_dsb_blunted_ends.csv file found there (one per sequenced cell; see
+    InduceSeq::save_dsb_blunted_ends) for DSB locations (_dsb_blunted_end_mean_positions),
+    combining all cells found in that folder. Plots these locations as points along a single
+    x-axis and saves the figure to dest_root/<same path minus the numbered folder>/dsb_graphs/<number>.png.
+
+    Simulation folders without a parameters.txt yet, without an output folder yet (not run), or
+    with no *_dsb_blunted_ends.csv data are skipped. Returns the number of graphs generated.
+    """
+    n_generated = 0
+    for dirpath, dirnames, filenames in os.walk(source_root):
+        if "parameters.txt" not in filenames:
+            continue
+        dirnames[:] = []                                                    # This is a simulation folder itself; don't descend into its output/ subfolder
+
+        with open(os.path.join(dirpath, "parameters.txt"), "r") as f:
+            parameters_lines = f.readlines()
+        output_dir = _output_dir_for(dirpath, parameters_lines)
+        if not os.path.isdir(output_dir):
+            continue
+
+        locations = []
+        for filename in sorted(os.listdir(output_dir)):
+            if _DSB_BLUNTED_ENDS_CSV_RE.search(filename):
+                locations.extend(_dsb_blunted_end_mean_positions(os.path.join(output_dir, filename)))
+        if not locations:
+            continue
+
+        dose_dir = os.path.dirname(dirpath)
+        number = os.path.basename(dirpath)
+        graphs_dir = os.path.join(dest_root, os.path.relpath(dose_dir, source_root), "dsb_graphs")
+        os.makedirs(graphs_dir, exist_ok=True)
+
+        plt.figure()
+        plt.scatter(locations, np.zeros(len(locations)), marker="|", s=200)
+        plt.yticks([])
+        plt.xlabel("DSB location (bp, concatenated genome coordinate)")
+        plt.title(f"DSB locations -- simulation {number}")
+        plt.savefig(os.path.join(graphs_dir, f"{number}.png"))
+        plt.close()
+
+        n_generated += 1
+
+    return n_generated
+
 
 if __name__ == "__main__" : graph_n_reads_vs_n_ssbs(62000)

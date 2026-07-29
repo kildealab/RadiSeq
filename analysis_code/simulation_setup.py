@@ -1,11 +1,22 @@
 import json
 import os
+import re
+import shutil
 from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from parameters import RUN_RESULTS_FOLDER, SDD_TEMPLATE, PARAMETERS_TEMPLATE
+from parameters import (
+    RUN_RESULTS_FOLDER,
+    SDD_TEMPLATE,
+    PARAMETERS_TEMPLATE,
+    SDD_FILES,
+    FINAL_SDDS_RUN_RESULTS_FOLDER,
+    FINAL_SDDS_PARAMETERS_TEMPLATE,
+)
+
+_SDD_OUTPUT_NUMBER_RE = re.compile(r"SDDOutput_(\d+)\.txt$")
 
 
 def _read_template_header_and_chrom_sizes():
@@ -223,10 +234,262 @@ def set_up_simulation_folder(n_dsbs, n_ssbs, n_trials):
 
     return sim_folder
 
-# if __name__ == "__main__":
+
+def _sdd_numbers_in_folder(folder):
+    """Returns {sdd_number: file_path} for every 'SDDOutput_<N>.txt' file found directly in folder."""
+    numbers = {}
+    for name in os.listdir(folder):
+        match = _SDD_OUTPUT_NUMBER_RE.match(name)
+        if match:
+            numbers[int(match.group(1))] = os.path.join(folder, name)
+    return numbers
+
+
+def _write_final_sdds_parameters(template_lines, dest_folder, sdd_file_paths, merge, particle_names, genome_fasta_path):
+    """
+    Creates dest_folder and writes a parameters.txt in it (based on template_lines), with
+    sddFilePath set to sdd_file_paths (a comma-separated list of absolute paths), merge flags set
+    according to merge/len(sdd_file_paths), primary_particles_simulated set to particle_names, and
+    induce_seq_genome_fasta_path set to genome_fasta_path (an absolute path, since the template's
+    relative path assumes a shallower folder depth than these generated folders sit at).
+
+    If dest_folder already has an output folder (its path taken from the new parameters.txt's own
+    output_directory_path, so this stays correct even if the template changes it), that folder --
+    along with any results from a previous run -- is removed, so the next run starts clean instead
+    of mixing with stale output.
+    """
+    os.makedirs(dest_folder, exist_ok=True)
+    parameters_lines = _set_parameter_lines(template_lines, {
+        "sddFilePath": ", ".join(sdd_file_paths),
+        "merge_damages_from_multiple_particles": "true" if merge else "false",
+        "number_of_particles_to_merge": len(sdd_file_paths),
+        "primary_particles_simulated": ",".join(particle_names),
+        "induce_seq_genome_fasta_path": genome_fasta_path,
+    })
+    with open(os.path.join(dest_folder, "parameters.txt"), "w") as f:
+        f.writelines(parameters_lines)
+
+    output_rel = _read_parameter_value(parameters_lines, "output_directory_path") or "./output"
+    output_dir = os.path.join(dest_folder, output_rel.lstrip("./"))
+    if os.path.isdir(output_dir):
+        shutil.rmtree(output_dir)
+
+
+def set_up_final_sdds_simulations():
+    """
+    Mirrors Final_SDDs' Neutron/Photon folder structure (skipping any folder with 'nico' in its
+    name, e.g. '1MeV_outer_nico') into FINAL_SDDS_RUN_RESULTS_FOLDER, creating one simulation
+    folder per SDD number found, each containing a parameters.txt based on
+    FINAL_SDDS_PARAMETERS_TEMPLATE:
+      - Neutron/<energy>/<dose>/<number>/parameters.txt: combines that number's proton and electron
+        SDD files (merge_damages_from_multiple_particles=true, number_of_particles_to_merge=2).
+        Only SDD numbers present in *both* the proton and electron folders are used, since a
+        combined-damage simulation needs both.
+      - Photon/<energy>/<dose>/<number>/parameters.txt: uses that number's single SDD file directly
+        (merge_damages_from_multiple_particles=false), since Photon folders aren't split by particle.
+    Re-running this (e.g. after Final_SDDs changes) overwrites each folder's parameters.txt and
+    deletes any output folder already there (see _write_final_sdds_parameters), so any results from
+    a previous run of that simulation are removed along with it.
+    Returns the number of simulation folders created.
+    """
+    with open(FINAL_SDDS_PARAMETERS_TEMPLATE, "r") as f:
+        template_lines = f.readlines()
+
+    genome_fasta_path = os.path.abspath(os.path.join("radiSeqData", "induce_seq_human_genome.fa"))
+
+    n_created = 0
+
+    # ----- Neutron: combine the proton + electron SDDs sharing the same number -----
+    neutron_root = os.path.join(SDD_FILES, "Neutron")
+    for energy_name in sorted(os.listdir(neutron_root)):
+        energy_folder = os.path.join(neutron_root, energy_name)
+        if not os.path.isdir(energy_folder) or "nico" in energy_name.lower():
+            continue
+
+        for dose_name in sorted(os.listdir(energy_folder)):
+            dose_folder = os.path.join(energy_folder, dose_name)
+            if not os.path.isdir(dose_folder):
+                continue
+            electron_folder = os.path.join(dose_folder, "electron")
+            proton_folder = os.path.join(dose_folder, "proton")
+            if not (os.path.isdir(electron_folder) and os.path.isdir(proton_folder)):
+                continue
+
+            electron_files = _sdd_numbers_in_folder(electron_folder)
+            proton_files = _sdd_numbers_in_folder(proton_folder)
+            shared_numbers = sorted(set(electron_files) & set(proton_files))
+
+            for number in shared_numbers:
+                dest_folder = os.path.join(FINAL_SDDS_RUN_RESULTS_FOLDER, "Neutron", energy_name, dose_name, str(number))
+                _write_final_sdds_parameters(
+                    template_lines, dest_folder,
+                    [os.path.abspath(proton_files[number]), os.path.abspath(electron_files[number])],
+                    merge=True, particle_names=["proton", "electron"], genome_fasta_path=genome_fasta_path,
+                )
+                n_created += 1
+
+    # ----- Photon: a single SDD file per simulation, no particle split -----
+    photon_root = os.path.join(SDD_FILES, "Photon")
+    for energy_name in sorted(os.listdir(photon_root)):
+        energy_folder = os.path.join(photon_root, energy_name)
+        if not os.path.isdir(energy_folder) or "nico" in energy_name.lower():
+            continue
+
+        for dose_name in sorted(os.listdir(energy_folder)):
+            dose_folder = os.path.join(energy_folder, dose_name)
+            if not os.path.isdir(dose_folder):
+                continue
+
+            sdd_files = _sdd_numbers_in_folder(dose_folder)
+            for number in sorted(sdd_files):
+                dest_folder = os.path.join(FINAL_SDDS_RUN_RESULTS_FOLDER, "Photon", energy_name, dose_name, str(number))
+                _write_final_sdds_parameters(
+                    template_lines, dest_folder,
+                    [os.path.abspath(sdd_files[number])],
+                    merge=False, particle_names=["photon"], genome_fasta_path=genome_fasta_path,
+                )
+                n_created += 1
+
+    return n_created
+
+
+# GRCh37 primary-assembly chromosome lengths in bp, from the NCBI GRC data page:
+# https://www.ncbi.nlm.nih.gov/grc/human/data?asm=GRCh37
+GRCH37_CHROM_LENGTHS_BP = {
+    "1": 249250621, "2": 243199373, "3": 198022430, "4": 191154276, "5": 180915260,
+    "6": 171115067, "7": 159138663, "8": 146364022, "9": 141213431, "10": 135534747,
+    "11": 135006516, "12": 133851895, "13": 115169878, "14": 107349540, "15": 102531392,
+    "16": 90354753, "17": 81195210, "18": 78077248, "19": 59128983, "20": 63025520,
+    "21": 48129895, "22": 51304566, "X": 155270560, "Y": 59373566,
+}
+
+
+def _read_chrom_sizes_from_sdd_header(sdd_path):
+    """
+    Reads sdd_path's header and returns the chromosome sizes declared in its 'Chromosome
+    sizes' field, in bp (Mbp value * 1e6, rounded to the nearest bp, matching how RadiSeq
+    itself interprets this field -- see NGSsdd::set_chrom_size_bp). Returns None if the file
+    has no such field before '***EndOfHeader***;' (or no such line at all).
+    """
+    with open(sdd_path, "r") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped.startswith("Chromosome sizes"):
+                content = stripped.rstrip(";").rstrip(",")
+                parts = [p.strip() for p in content.split(",")]
+                n_chrom = int(parts[1])
+                sizes_mbp = [float(x) for x in parts[2:2 + n_chrom]]
+                return [round(size * 1e6) for size in sizes_mbp]
+            if stripped.startswith("***EndOfHeader***"):
+                break
+    return None
+
+
+def _slot_reference_chrom_names(n_chrom):
+    """
+    Returns the GRCH37_CHROM_LENGTHS_BP key for each of the n_chrom chromosome slots declared
+    in an SDD file's 'Chromosome sizes' field, assuming slots are listed in the order used
+    throughout this project's SDD files: autosomes 1..22 (copy 1), then autosomes 1..22 again
+    (copy 2), then Y, then X.
+    """
+    autosomes = [str(i) for i in range(1, 23)]
+    names = autosomes + autosomes + ["Y", "X"]
+    if n_chrom != len(names):
+        raise ValueError(f"Expected {len(names)} chromosome slots (autosomes x2 + Y + X), got {n_chrom}")
+    return names
+
+
+def _sdd_file_paths_referenced_by(results_folder):
+    """
+    Returns the set of SDD file paths used by simulation folders under results_folder: every
+    path assigned to 'sddFilePath' in any parameters.txt found in the tree (comma-separated
+    lists are split into individual paths), plus any '*.sdd' file found directly in the tree.
+    """
+    sdd_paths = set()
+    for root, _dirs, files in os.walk(results_folder):
+        for name in files:
+            if name == "parameters.txt":
+                with open(os.path.join(root, name), "r") as f:
+                    lines = f.readlines()
+                value = _read_parameter_value(lines, "sddFilePath")
+                if value:
+                    sdd_paths.update(p.strip() for p in value.split(",") if p.strip())
+            elif name.endswith(".sdd"):
+                sdd_paths.add(os.path.join(root, name))
+    return sdd_paths
+
+
+def check_sdd_files_for_out_of_bounds_damage(results_folder=FINAL_SDDS_RUN_RESULTS_FOLDER):
+    """
+    Goes through every SDD file referenced from results_folder (see
+    _sdd_file_paths_referenced_by), reads the chromosome sizes declared in its own header, and
+    checks every DNA damage line's position-in-chromosome (SDD field 4) against the real
+    GRCh37 length of the chromosome that slot corresponds to (GRCH37_CHROM_LENGTHS_BP, ordered
+    per _slot_reference_chrom_names). Prints one entry per SDD file that contains at least one
+    damage whose position exceeds the real chromosome length, summarizing -- per affected
+    chromosome slot -- how many such damages were found and the worst overshoot in bp.
+    """
+    sdd_paths = sorted(_sdd_file_paths_referenced_by(results_folder))
+    print(f"Checking {len(sdd_paths)} SDD file(s) referenced from {results_folder}...")
+
+    n_files_with_overflow = 0
+    for sdd_path in sdd_paths:
+        chrom_sizes_bp = _read_chrom_sizes_from_sdd_header(sdd_path)
+        if chrom_sizes_bp is None:
+            print(f"  {sdd_path}: no 'Chromosome sizes' header field found, skipping")
+            continue
+        chrom_names = _slot_reference_chrom_names(len(chrom_sizes_bp))
+
+        overflow = {}  # slot_idx -> (count_of_damages_beyond_real_length, max_overshoot_bp)
+        with open(sdd_path, "r") as f:
+            past_header = False
+            for line in f:
+                if not past_header:
+                    if line.strip().startswith("***EndOfHeader***"):
+                        past_header = True
+                    continue
+                fields = line.split(";")
+                if len(fields) < 4:
+                    continue
+                chrom_id = int(fields[2].split(",")[1].strip())
+                position_in_chrom = int(fields[3].strip())
+                slot_idx = chrom_id - 1
+                real_length = GRCH37_CHROM_LENGTHS_BP[chrom_names[slot_idx]]
+                if position_in_chrom > real_length:
+                    count, max_overshoot = overflow.get(slot_idx, (0, 0))
+                    overshoot = position_in_chrom - real_length
+                    overflow[slot_idx] = (count + 1, max(max_overshoot, overshoot))
+
+        if overflow:
+            n_files_with_overflow += 1
+            print(f"  {sdd_path}:")
+            for slot_idx in sorted(overflow):
+                count, max_overshoot = overflow[slot_idx]
+                chrom_name = chrom_names[slot_idx]
+                print(
+                    f"    chr{chrom_name} (slot {slot_idx + 1}): {count} damage(s) beyond the real "
+                    f"GRCh37 length ({GRCH37_CHROM_LENGTHS_BP[chrom_name]:,} bp; SDD declares "
+                    f"{chrom_sizes_bp[slot_idx]:,} bp) -- worst overshoot {max_overshoot:,} bp"
+                )
+
+    print(
+        f"\n{n_files_with_overflow} of {len(sdd_paths)} SDD file(s) contain damage positions "
+        "beyond the real GRCh37 chromosome length."
+    )
+
+
+if __name__ == "__main__":
     # density = 1/50000
     # for ssb_density in [1/250, 1/500, 1/1000, 1/10000, 1/100000, 1/50000, 1/1000000]:
     #     genome_length = 3.1e9
     #     n_dsbs = int(density*genome_length)
     #     n_ssbs = int(ssb_density*genome_length)
     #     set_up_simulation_folder(n_dsbs, n_ssbs, 3)
+
+    # for density in [1/500, 1/1000, 1/1e4, 1/1e5, 1/5e5, 1/1e6]:
+    #     genome_length = 3.1e9 * 2
+    #     n_dsbs = int(density*genome_length)
+    #     # n_ssbs = int(ssb_density*genome_length)
+    #     set_up_simulation_folder(n_dsbs, 0, 3)
+
+    set_up_final_sdds_simulations()

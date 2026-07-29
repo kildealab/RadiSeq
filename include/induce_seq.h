@@ -18,7 +18,9 @@ public:
     void set_parameter(NGSParameters param);                                         // function to set the parameter member
     void set_genome_data(std::string& tempFolderPath);                               // function to set genome data by memory-mapping the reference genome
     void find_DSBs(int DSBthreshold, int groupTID);                                  // function to find DSBs from backbone breaks on opposite strands within a threshold and on the same chromosome
+    void save_dsb_locations(int cell_number, int groupTID);                          // function to save every element of dsb_locations[groupTID] to a csv file
     void get_blunted_ends(int groupTID);                                             // function to determine blunted ends from the DSB locations
+    void save_dsb_blunted_ends(int cell_number, int groupTID);                       // function to save every element of dsb_blunted_ends[groupTID] to a csv file
     void get_dsb_fragments(int groupTID, int threadID);                              // function to get the DSB fragments from the blunted ends
     void filter_dsb_fragments(int groupTID, int threadID);                          // function to filter dsb_fragments_left/right by fragment size, using probability_of_sequencing_function, called after get_dsb_fragments
     void filter_dsb_strands_ssd(int groupTID);                                       // function to filter DSB strands by single-strand damage
@@ -47,6 +49,7 @@ private:
     std::map<int, double> probability_of_sequencing_function;                          // Length -> probability of keeping (retaining) a fragment of that length, read from the induce_seq probability of sequencing file
     NGSParameters parameter;                                                         // Holds the simulation parameters
     NGSsdd& sdd_data;                                                                // Reference to the shared NGSsdd instance holding genome/backbone break data
+    std::vector<long> chrom_end_loc;                                                 // Copy of *sdd_data.get_chrom_end_loc(), set at construction time
     char* genome_fasta{nullptr};                                                     // Path to the reference genome FASTA file
     size_t genome_fasta_size{0};                                                     // Size in bytes of the genome_fasta memory map
     std::vector<int> cum_chrom_header_sizes;                                         // Cumulative chromosome header sizes

@@ -14,20 +14,28 @@
 
 
 
-InduceSeq::InduceSeq(NGSsdd& sddData) : sdd_data(sddData) {
+InduceSeq::InduceSeq(NGSsdd& sddData) : sdd_data(sddData), chrom_end_loc(*sddData.get_chrom_end_loc()) {
 }
 
-InduceSeq::InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string tempFolderPath) : sdd_data(sddData) {
+InduceSeq::InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string tempFolderPath) : sdd_data(sddData), chrom_end_loc(*sddData.get_chrom_end_loc()) {
     parameter = parameters;
-    set_genome_data(tempFolderPath);
+    // DSB/fragment finding runs regardless of generate_reads (it drives the DSB-locations and sequenced-DSBs
+    // output files), but the genome FASTA and ART read-generation setup are only needed to actually produce reads.
+    if (parameter.get_generate_reads()) {
+        set_genome_data(tempFolderPath);
+    }
     set_fragment_size_distribution_from_file();
     set_probability_of_keeping_from_file();
     P7_adapter_sequence = *parameter.get_P7_adapter_sequence();
 
-    // Initialize parameters for read generation. GC_binSize and fraction_nonFR_read_pairs are not used for Induce Seq, but are neaded as parameters for the function 
-    ART::initiate_read_generation(parameter.get_read_length(), parameter.get_GC_binSize(), parameter.get_fraction_nonFR_read_pairs(), parameter.get_read_artifacts_rate());
-    ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
+    if (parameter.get_generate_reads()) {
+        // Initialize parameters for read generation. GC_binSize and fraction_nonFR_read_pairs are not used for Induce Seq, but are neaded as parameters for the function
+        ART::initiate_read_generation(parameter.get_read_length(), parameter.get_GC_binSize(), parameter.get_fraction_nonFR_read_pairs(), parameter.get_read_artifacts_rate());
+        ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
+    }
 }
+
+
 
 // Reads the DNA fragment size distribution file (same "length count" format as fragment_size_distribution_path)
 // from the path set by the induce_seq_fragment_size_distribution_path parameter, and converts the returned
@@ -108,7 +116,9 @@ void InduceSeq::reset_permanent_damage_vecs(int groupTID){                      
 
 void InduceSeq::run_simulation(int cell_number, int groupTID, int threadID, int NumWorkerThreads, int threadIDOffset) {
     find_DSBs(parameter.get_dsb_threshold(), groupTID);
+    save_dsb_locations(cell_number, groupTID);
     get_blunted_ends(groupTID);
+    save_dsb_blunted_ends(cell_number, groupTID);
     get_dsb_fragments(groupTID, threadID);
     filter_dsb_fragments(groupTID, threadID);
     filter_dsb_strands_ssd(groupTID);
@@ -121,7 +131,10 @@ void InduceSeq::run_simulation(int cell_number, int groupTID, int threadID, int 
 // rebuilding it. If it is set but the file does not exist yet, the file is built and saved to that path (instead of
 // tempFolderPath) so that it can be re-used by later runs. If it is unset (default), the file is built fresh in
 // tempFolderPath, as before. Sets genome_fasta to point to the first character of the memory map of the fasta file.
-// Initializes cum_chrom_header_sizes and chrom_headers (described in the header file)
+// Initializes cum_chrom_header_sizes and chrom_headers (described in the header file). If the chromosome sizes
+// listed in the SDD file don't match the constructed genome fasta file, chrom_end_loc (along with
+// cum_chrom_header_sizes and chrom_headers) is recomputed from the fasta file's actual chromosome sizes instead,
+// after printing a warning, rather than aborting the run (see calculateActualChromEndLoc).
 void InduceSeq::set_genome_data(std::string& tempFolderPath) {
     std::string empty_path = "\"\"";                                                                          // Sentinel value that marks an unset path-type parameter, as read from the default parameter file
     const std::string& savedGenomeFastaPath = *parameter.get_induce_seq_genome_fasta_path();
@@ -137,28 +150,34 @@ void InduceSeq::set_genome_data(std::string& tempFolderPath) {
         buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes);
     }
 
-    if (calculateCumChromHeaderSizes(cum_chrom_header_sizes, chrom_headers, genome_fasta, genome_fasta_size, *sdd_data.get_chrom_end_loc())) {
-        std::cerr<<"\n ERROR: The chromosome sizes listed in the sdd file do not match the chromosome sizes in the genome fasta file " << parameter.get_reference_genome();
-        exit(EXIT_FAILURE);
+    if (calculateCumChromHeaderSizes(cum_chrom_header_sizes, chrom_headers, genome_fasta, genome_fasta_size, chrom_end_loc)) {
+        std::cerr<<"\n WARNING: The chromosome sizes listed in the sdd file do not match the chromosome sizes in the genome fasta file "
+                 << parameter.get_reference_genome() << ". Using the chromosome sizes found in the constructed genome fasta file instead.\n";
+        calculateActualChromEndLoc(cum_chrom_header_sizes, chrom_headers, chrom_end_loc, genome_fasta, genome_fasta_size);
     }
 }
 
-// finds DSBs from the ssd data, for a given groupTID. Populates the dsb_locations[groupTID] vector (format described in header file). 
-// DSBthreshold is the maximum distance between a pair of strand breaks for them to qualify as a dsb. 
-// ssd_data should have its backbone break vectors initialized and sorted least position to greatest position before this function is called
+// finds DSBs from the ssd data, for a given groupTID. Populates the dsb_locations[groupTID] vector (format described in header file).
+// DSBthreshold is the maximum distance between a pair of strand breaks for them to qualify as a dsb.
+// ssd_data should have its backbone break vectors initialized and sorted least position to greatest position before this function is called.
+// Damages beyond the end of the last chromosome (chrom_end_loc.back(), which can be smaller than what the SDD file's
+// own damage positions assume if its declared chromosome sizes didn't match the constructed genome fasta; see
+// set_genome_data) are not considered: since both break vectors are sorted ascending, the loop simply stops as soon
+// as either site reaches such a position, rather than processing the (invalid) remainder of either vector.
 void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
     std::vector<long>& backbone1_breaks = sdd_data.get_backbone1_break_loc(groupTID);
     std::vector<long>& backbone2_breaks = sdd_data.get_backbone2_break_loc(groupTID);
     std::vector<long>::iterator site1 = backbone1_breaks.begin();
 	std::vector<long>::iterator site2 = backbone2_breaks.begin();
-    const std::vector<long>& chromEnds = *sdd_data.get_chrom_end_loc();                                         // chrom_end_loc is sorted in ascending order
-    
+    const std::vector<long>& chromEnds = chrom_end_loc;                                                         // chrom_end_loc is sorted in ascending order
+    long genome_end = chromEnds.back();                                                                         // End position of the last chromosome; no valid damage position can be larger than this
+
     // variable to keep track of whether the previous step in the while loop was a dsb
     // used for keeping track of dsbs that are part of interconnected dsb, as explained below
     bool prevStepDSB = 0;
     
-    //go through backbone breaks, checking for dsbs.  
-    while (site1 != backbone1_breaks.end() && site2 != backbone2_breaks.end()){
+    //go through backbone breaks, checking for dsbs.
+    while (site1 != backbone1_breaks.end() && site2 != backbone2_breaks.end() && *site1 <= genome_end && *site2 <= genome_end){
         int siteDiff = *site1 - *site2;                                                                 // separation in number of bp
 		bool isDSB{0};                                                                                  // initiating with zero
         long chromIdx1;
@@ -185,8 +204,8 @@ void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
             // The fourth data field in recorded dsbs is whether the previous step was a dsb. 
             // Thus, when parsing through dsbs, if consecutive dsbs have 1 in that field, they are part of a set of interconnected dsbs.
             // In that case, the last dsb in that sequence and dsb directly before that, which has a 0 in the fourth field, are the dsbs to consider for InduceSeq
-            bool site1_has_next = (site1 + 1) != backbone1_breaks.end();
-            bool site2_has_next = (site2 + 1) != backbone2_breaks.end();
+            bool site1_has_next = (site1 + 1) != backbone1_breaks.end() && *(site1 + 1) <= genome_end;
+            bool site2_has_next = (site2 + 1) != backbone2_breaks.end() && *(site2 + 1) <= genome_end;
             if (site1_has_next && site2_has_next) {
                 if ( (*(site1+1) - *site2) < (*(site2+1) - *site1)) {
                     site1++;
@@ -210,8 +229,35 @@ void InduceSeq::find_DSBs(int DSBthreshold, int groupTID){
     }
 }
 
+// Saves every element of dsb_locations[groupTID] to a csv file, one row per DSB (see find_DSBs for
+// how these fields are populated, including what the 'is_previous_step_dsb' field means for
+// interconnected DSB clusters).
+void InduceSeq::save_dsb_locations(int cell_number, int groupTID) {
+    std::string filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_dsbs.csv";
+    std::ofstream dsbs_file(filename.c_str());
+    dsbs_file << "strand1_break_location,strand2_break_location,chromosome_index,is_previous_step_dsb\n";
+    for (const std::vector<long>& dsb : dsb_locations[groupTID]) {
+        dsbs_file << dsb[0] << "," << dsb[1] << "," << dsb[2] << "," << dsb[3] << "\n";
+    }
+    dsbs_file.close();
+}
+
+// Saves every element of dsb_blunted_ends[groupTID] to a csv file, one row per blunted end (see
+// get_blunted_ends for how these fields are populated, and for the field format).
+void InduceSeq::save_dsb_blunted_ends(int cell_number, int groupTID) {
+    std::string filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_dsb_blunted_ends.csv";
+    std::ofstream blunted_ends_file(filename.c_str());
+    blunted_ends_file << "left_edge_location,right_edge_location,chromosome_index,left_dsb_strand1_location,left_dsb_strand2_location,right_dsb_strand1_location,right_dsb_strand2_location\n";
+    for (const std::vector<long>& blunted_end : dsb_blunted_ends[groupTID]) {
+        blunted_ends_file << blunted_end[0] << "," << blunted_end[1] << "," << blunted_end[2] << "," << blunted_end[3] << "," << blunted_end[4] << "," << blunted_end[5] << "," << blunted_end[6] << "\n";
+    }
+    blunted_ends_file.close();
+}
+
 void InduceSeq::close() {
-    munmap(genome_fasta, genome_fasta_size);
+    if (genome_fasta != nullptr) {                                                                             // genome_fasta stays null when generate_reads is False, since set_genome_data is never called
+        munmap(genome_fasta, genome_fasta_size);
+    }
 }
 
 void InduceSeq::get_blunted_ends(int groupTID) {
@@ -276,7 +322,7 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
         if (fragment_length > 1 && !skip_this_left_fragment) {
             long left_start = dsb_blunted_end[0];
             long left_end = left_start - fragment_length + 1;
-            long chrom_start = (*sdd_data.get_chrom_end_loc())[chrom_idx] + 1;
+            long chrom_start = chrom_end_loc[chrom_idx] + 1;
             bool drop_current_left = false;
             if (left_end < chrom_start) {
                 left_end = chrom_start;
@@ -310,7 +356,7 @@ void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
         long right_end = right_start + fragment_length - 1;
         bool right_appended = false;
         if (fragment_length > 1) {
-            long chrom_end = (*sdd_data.get_chrom_end_loc())[chrom_idx + 1];
+            long chrom_end = chrom_end_loc[chrom_idx + 1];
             if (right_end > chrom_end) right_end = chrom_end;
 
             // Check whether this right fragment runs into the next dsb's left blunted end (plus the adapter length).
@@ -524,6 +570,7 @@ void InduceSeq::filter_dsb_strands_ssd(int groupTID) {
     }
 }
 
+// AAAA maybe implement damage on strand end (blunting) 
 void InduceSeq::find_base_pair_damages(int groupTID) {
     base_pair_damages_left[groupTID].clear();
     base_pair_damages_right[groupTID].clear();
@@ -558,20 +605,22 @@ void InduceSeq::find_base_pair_damages(int groupTID) {
 
 void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int num_available_threads, int threadIDOffset) {
 
-    // ofstream object of the output fastq file for read 1
+    // ofstream object of the output fastq file for read 1. Not opened/created at all if generate_reads is False.
     std::string output_file_ending;
     std::string output_fastq_R1_filename;
     std::ofstream fastq_R1_file;
-    if (parameter.get_compress_output()) {
-        output_file_ending = ".fastq.gz";
-        output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_R1" + output_file_ending;    
-        fastq_R1_file.open(output_fastq_R1_filename.c_str(),std::ios::binary);
-    } else {
-        output_file_ending = ".fastq";
-        output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_R1" + output_file_ending;
-        fastq_R1_file.open(output_fastq_R1_filename.c_str());
-    } 
-    
+    if (parameter.get_generate_reads()) {
+        if (parameter.get_compress_output()) {
+            output_file_ending = ".fastq.gz";
+            output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_R1" + output_file_ending;
+            fastq_R1_file.open(output_fastq_R1_filename.c_str(),std::ios::binary);
+        } else {
+            output_file_ending = ".fastq";
+            output_fastq_R1_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_R1" + output_file_ending;
+            fastq_R1_file.open(output_fastq_R1_filename.c_str());
+        }
+    }
+
     // ofstream object of the output file listing the DSBs that were sequenced, if requested. Never compressed.
     std::string output_sequenced_dsbs_filename;
     std::ofstream sequenced_dsbs_file;
@@ -591,11 +640,13 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
     simulation_data_file.close();
 
     ART read1;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
-    read1.set_read_error_rates(parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
-    read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
-    read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
-    read1.resize_vectors(parameter.get_number_of_threads());                                         // Sized to the full global thread count since threadID below spans that range, not just this call's num_available_threads
-    
+    if (parameter.get_generate_reads()) {
+        read1.set_read_error_rates(parameter.get_insertion_error_rate_read1(), parameter.get_deletion_error_rate_read1());
+        read1.set_read_error_probability(parameter.get_read_length(), parameter.get_insertion_error_rate_read1(), read1.insertion_probability_vec, parameter.get_max_errors_in_read());
+        read1.set_read_error_probability(parameter.get_read_length(), parameter.get_deletion_error_rate_read1(), read1.deletion_probability_vec, parameter.get_max_errors_in_read());
+        read1.resize_vectors(parameter.get_number_of_threads());                                     // Sized to the full global thread count since threadID below spans that range, not just this call's num_available_threads
+    }
+
     std::string chromSegSeq;                                                                        // Temporary variable to hold each chromosome segment sequence from the fasta file one at a time
     std::string chromSegSeq_ID;                                                                     // Temporary variable to hold IDs of each hromosome segment sequence
 
@@ -611,7 +662,6 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
     for (size_t i=0; i<dsb_strands_left[groupTID].size() + dsb_strands_right[groupTID].size(); i++) {
         int localTID = omp_get_thread_num();                                                       // ID local to this call's team (0..num_available_threads-1); safe to index batch_buffer, which is private to this call
         int threadID = threadIDOffset + localTID;                                                  // Globally-unique ID (0..nThreads_User-1) required by rng::local_mt and ART's per-thread buffers, which are shared across all concurrently-running groups
-        std::string dna_seq;
         std::vector<long> dsb_strand;
         std::vector<long> bp_damages;
         bool is_left;
@@ -637,45 +687,49 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
             }
         }
 
-        get_dna_sequence(dna_seq, bp_damages, dsb_strand, is_left);
-        read1.generate_read_with_indel_from_frag(dna_seq, P7_adapter_sequence, threadID);               // Make a read with random indel errors
-        std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
-        read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
-        read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
-        
-        std::string chromID = chrom_headers[dsb_strand[2]];                  
-        std::string read_data = "@"+chromID+"_read"+std::to_string(i)+"\n";                           // @readID
-        read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +
-        for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores; insert only as many quality values as with the length of sequence
-            read_data += static_cast<char>(read1_quality_score_vec[k]+32);          // +33 to get the phred score
-        }
-        read_data += "\n";
+        if (parameter.get_generate_reads()) {
+            std::string dna_seq;
+            get_dna_sequence(dna_seq, bp_damages, dsb_strand, is_left);
+            read1.generate_read_with_indel_from_frag(dna_seq, P7_adapter_sequence, threadID);               // Make a read with random indel errors
+            std::vector<short> read1_quality_score_vec;                                 // Vector to hold the quality scores for read 1
+            read1.get_read_quality(read1_quality_score_vec, 1, threadID);               // Get the read quality scores for the read positions
+            read1.add_baseCall_error(read1_quality_score_vec, threadID);                // Add base call errors to the read based on the quality scores
 
-        batch_buffer[localTID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread
+            std::string chromID = chrom_headers[dsb_strand[2]];
+            std::string read_data = "@"+chromID+"_read"+std::to_string(i)+"\n";                           // @readID
+            read_data += (*read1.get_final_read_sequence(threadID))+ "\n+\n";           // read sequence and +
+            for(size_t k=0; k<(*read1.get_final_read_sequence(threadID)).size(); k++){  // read quality scores; insert only as many quality values as with the length of sequence
+                read_data += static_cast<char>(read1_quality_score_vec[k]+32);          // +33 to get the phred score
+            }
+            read_data += "\n";
 
-        if (batch_buffer[localTID].size() >= static_cast<size_t>(batchSize_thread)) {// Check if the batch buffer is full, and write it to the file if needed.
-            if (parameter.get_compress_output()) {
-                // compression can be done in paralell, since there is no shared memory.
-                std::string compressed_batch = getCompressedBatch(batch_buffer[localTID]);
-                // writing can only be done by one thread at a time.
-                // writeBatchToFile with compression = true is not used so that compression and writing can be done in separate blocks
-                #pragma omp critical(section1)
-                {
-                    fastq_R1_file.write(compressed_batch.c_str(), compressed_batch.size());
-                }
-            } else {
-                #pragma omp critical(section1)
-                {
-                    writeBatchToFile(batch_buffer[localTID], fastq_R1_file, false);
+            batch_buffer[localTID].push_back(read_data);                                // Add the read data to the buffer vector of the respective thread
+
+            if (batch_buffer[localTID].size() >= static_cast<size_t>(batchSize_thread)) {// Check if the batch buffer is full, and write it to the file if needed.
+                if (parameter.get_compress_output()) {
+                    // compression can be done in paralell, since there is no shared memory.
+                    std::string compressed_batch = getCompressedBatch(batch_buffer[localTID]);
+                    // writing can only be done by one thread at a time.
+                    // writeBatchToFile with compression = true is not used so that compression and writing can be done in separate blocks
+                    #pragma omp critical(section1)
+                    {
+                        fastq_R1_file.write(compressed_batch.c_str(), compressed_batch.size());
+                    }
+                } else {
+                    #pragma omp critical(section1)
+                    {
+                        writeBatchToFile(batch_buffer[localTID], fastq_R1_file, false);
+                    }
                 }
             }
         }
     }
-    for (size_t l=0;l<batch_buffer.size();l++){
-        writeBatchToFile(batch_buffer[l], fastq_R1_file, parameter.get_compress_output());      // If there are unwritten data in batch buffer, write that too when the loop ends
+    if (parameter.get_generate_reads()) {
+        for (size_t l=0;l<batch_buffer.size();l++){
+            writeBatchToFile(batch_buffer[l], fastq_R1_file, parameter.get_compress_output());      // If there are unwritten data in batch buffer, write that too when the loop ends
+        }
+        fastq_R1_file.close();
     }
-
-    fastq_R1_file.close();
     if (parameter.get_output_sequenced_dsbs()) {
         for (size_t l=0;l<dsb_batch_buffer.size();l++){
             writeBatchToFile(dsb_batch_buffer[l], sequenced_dsbs_file, false);      // If there is unwritten data in the dsb batch buffer, write that too when the loop ends
@@ -696,17 +750,17 @@ void InduceSeq::get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_dam
             dna_seq[dam_i] = 'N';
         }
         std::reverse(dna_seq.begin(), dna_seq.end());
-    } else {
-        dna_seq = std::string(genome_fasta + start_char_i, genome_fasta + end_char_i + 1);
-        for (long bp_damage : bp_damages) {
-            int dam_i = bp_damage - dsb_strand[0];
-            dna_seq[dam_i] = 'N';
-        }
         for (char& base : dna_seq) {
             if      (base == 'A') base = 'T';
             else if (base == 'T') base = 'A';
             else if (base == 'C') base = 'G';
             else if (base == 'G') base = 'C';
+        }
+    } else {
+        dna_seq = std::string(genome_fasta + start_char_i, genome_fasta + end_char_i + 1);
+        for (long bp_damage : bp_damages) {
+            int dam_i = bp_damage - dsb_strand[0];
+            dna_seq[dam_i] = 'N';
         }
     }
 }

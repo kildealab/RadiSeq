@@ -72,6 +72,7 @@ class NGSParameters{
     std::string induce_seq_probability_of_sequencing_file_name;                  // Hard-coded default file name for the induce_seq probability of sequencing data
     std::string induce_seq_probability_of_sequencing_path;                       // Path to the file containing the probability of sequencing (by fragment length) used in induce_seq
     double probability_of_sequencing_multiplier;                                 // Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used in induce_seq
+    bool is_generate_reads{true};                                                // True if reads should be generated in induce_seq. If False, the genome FASTA is not created/loaded and no read output file is created
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -238,6 +239,9 @@ public:
 
     void set_probability_of_sequencing_multiplier(std::string*, std::string*);    // function to set 'probability_of_sequencing_multiplier'
     double get_probability_of_sequencing_multiplier();                           // function to get 'probability_of_sequencing_multiplier'
+
+    void set_generate_reads(std::string*, std::string*);                     // function to set "is_generate_reads"
+    bool get_generate_reads();                                               // function to get "is_generate_reads"
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

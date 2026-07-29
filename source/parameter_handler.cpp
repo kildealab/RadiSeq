@@ -220,6 +220,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "probability_of_sequencing_multiplier"){
         set_probability_of_sequencing_multiplier(paramName, paramValue);
     }
+    else if (*paramName == "generate_reads"){
+        set_generate_reads(paramName, paramValue);
+    }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
         <<" ----- This parameter will be ignored -----\n";
@@ -338,6 +341,14 @@ void NGSParameters::set_output_sequenced_dsbs(std::string* paramName, std::strin
     }else{
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_sequenced_dsbs()<<"\" -----\n";
+    }
+}
+void NGSParameters::set_generate_reads(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_generate_reads = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_generate_reads()<<"\" -----\n";
     }
 }
 void NGSParameters::set_sequencer(std::string* paramValue){
@@ -587,6 +598,9 @@ double NGSParameters::get_maximum_overlap_fragment_generation(){
 }
 const std::string* NGSParameters::get_induce_seq_fragment_size_distribution_path(){
     return(&induce_seq_fragment_size_distribution_path);
+}
+bool NGSParameters::get_generate_reads(){
+    return(is_generate_reads);
 }
 bool NGSParameters::get_output_sequenced_dsbs(){
     return(is_output_sequenced_dsbs);
@@ -845,6 +859,11 @@ void NGSParameters::help_parameter(std::string* paramName){
     else if (*paramName == "probability_of_sequencing_multiplier"){
         std::cerr<<" Specify the flat probability (independent of fragment size) that a DSB fragment survives sequencing in induce_seq. \n"
         <<" This value should be a double in the range [0,1]\n";
+    }
+    else if (*paramName == "generate_reads"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not you wish to generate reads in induce_seq. \n"
+        <<" If False, the genome FASTA is not built/loaded and no read output file is created; all other induce_seq output files are still created. \n";
     }
 }
 //--------------------------------------------------------------------------------------------
