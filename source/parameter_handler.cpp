@@ -17,10 +17,10 @@ NGSParameters::NGSParameters(){
     reference_genome_file_name = "/Human_reference_genome.fa";
     induce_seq_fragment_size_distribution_file_name = "/FragmentSizeDist_induceSeq.txt";
     induce_seq_probability_of_sequencing_file_name = "/induce_seq_probability_of_sequencing.csv";
-    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","Test","Custom"};
-    list_read_lengths = {100, 100, 125, 150, 150, 151, 5};
-    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
-    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","test_R2.txt"};
+    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","NextSeq500_v75","Test","Custom"};
+    list_read_lengths = {100, 100, 125, 150, 150, 151, 75, 5};
+    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","NextSeq500v2L75R1.txt","test_R1.txt"};
+    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","NextSeq500v2L75R2.txt","test_R2.txt"};
 }
 
 

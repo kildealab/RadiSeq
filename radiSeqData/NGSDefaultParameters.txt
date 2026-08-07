@@ -33,7 +33,7 @@ DSB_threshold_in_bp                         = 10                      # Maximum 
                                                                       # double-strand break (DSB). Specify the distance in bp
 
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
-                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
+                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX, NovaSeq6000 and NextSeq500_v75
 
 custom_read1_quality_profile_path           = ""                      # Must specify the path to the quality profile file for read 1 if custom sequencer is chosen
 
