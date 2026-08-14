@@ -10,12 +10,12 @@
 // Default constructor
 NGSParameters::NGSParameters(){
     dsb_threshold = 10;
-    first_size_filter = 150;
     maximum_overlap_fragment_generation = 0.4;
     probability_of_sequencing_multiplier = 0.94;
     default_parameter_file_name = "/NGSDefaultParameters.txt";
+    induce_seq_default_parameter_file_name = "/InduceSeqDefaultParameters.txt";
     reference_genome_file_name = "/Human_reference_genome.fa";
-    induce_seq_fragment_size_distribution_file_name = "/FragmentSizeDist_induceSeq.txt";
+    dsb_end_fragment_size_distribution_file_name = "/FragmentSizeDist_induceSeq.txt";
     induce_seq_probability_of_sequencing_file_name = "/induce_seq_probability_of_sequencing.csv";
     list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","NextSeq500_v75","Test","Custom"};
     list_read_lengths = {100, 100, 125, 150, 150, 151, 75, 5};
@@ -44,13 +44,28 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
     }
     // Defining data filenames w.r.t the variable dataFolderPath
     default_parameter_file = dataFolderPath+default_parameter_file_name;
+    induce_seq_default_parameter_file = dataFolderPath+induce_seq_default_parameter_file_name;
     reference_genome_file = dataFolderPath+reference_genome_file_name;
-    induce_seq_fragment_size_distribution_path = dataFolderPath+induce_seq_fragment_size_distribution_file_name;
+    dsb_end_fragment_size_distribution_path = dataFolderPath+dsb_end_fragment_size_distribution_file_name;
     induce_seq_probability_of_sequencing_path = dataFolderPath+induce_seq_probability_of_sequencing_file_name;
 
     // Continue if parameter file is present and set all parameter values
     readParameterFile(&default_parameter_file, parameter);         // Read default parameter file first to set default parameter values
     readParameterFile(parameterfile, parameter);                   // Read user-specified parameter file to overwrite default parameter values
+
+    // If induce_seq is requested, read the induce_seq specific parameters from the appropriate file
+    if(get_induce_seq()){
+        std::string empty_path = "\"\"";                                              // Empty string parameter values are stored literally as "" (unstripped quotes)
+        if(induce_seq_parameters_path.empty() || induce_seq_parameters_path == empty_path){ // If no path is specified, use the default induce_seq parameters file
+            readParameterFile(&induce_seq_default_parameter_file, parameter);
+        }else if(!checkFileExists(&induce_seq_parameters_path)){                      // If a path is specified but the file cannot be found, exit gracefully
+            std::cerr<<"\n ERROR: Unable to read the induce_seq parameter file : "<< induce_seq_parameters_path<<'\n';
+            exit(EXIT_FAILURE);
+        }else{
+            std::cout<<"\n Successfully read the induce_seq parameter file: "<< induce_seq_parameters_path<<'\n';
+            readParameterFile(&induce_seq_parameters_path, parameter);
+        }
+    }
 
     success_parameter();                                           // Check if provided parameters meet all conditions and if it is appropriate
 
@@ -199,14 +214,11 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "P7_adapter_sequence"){
         set_P7_adapter_sequence(paramValue);
     }
-    else if (*paramName == "first_size_filter"){
-        set_first_size_filter(paramValue);
-    }
     else if (*paramName == "maximum_overlap_fragment_generation"){
         set_maximum_overlap_fragment_generation(paramName, paramValue);
     }
-    else if (*paramName == "induce_seq_fragment_size_distribution_path"){
-        set_induce_seq_fragment_size_distribution_path(paramName, paramValue);
+    else if (*paramName == "dsb_end_fragment_size_distribution_path"){
+        set_dsb_end_fragment_size_distribution_path(paramName, paramValue);
     }
     else if (*paramName == "output_sequenced_dsbs"){
         set_output_sequenced_dsbs(paramName, paramValue);
@@ -214,7 +226,7 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "induce_seq_genome_fasta_path"){
         set_induce_seq_genome_fasta_path(paramValue);
     }
-    else if (*paramName == "induce_seq_probability_of_sequencing_path"){
+    else if (*paramName == "induce_seq_probability_of_sequencing_path" || *paramName == "probability_of_sequencing_path"){
         set_induce_seq_probability_of_sequencing_path(paramName, paramValue);
     }
     else if (*paramName == "probability_of_sequencing_multiplier"){
@@ -222,6 +234,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     }
     else if (*paramName == "generate_reads"){
         set_generate_reads(paramName, paramValue);
+    }
+    else if (*paramName == "induce_seq_parameters_path"){
+        set_induce_seq_parameters_path(paramValue);
     }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
@@ -299,9 +314,6 @@ void NGSParameters::set_P5_adapter_length(std::string* paramValue){
 void NGSParameters::set_P7_adapter_sequence(std::string* paramValue){
     P7_adapter_sequence = *paramValue;
 }
-void NGSParameters::set_first_size_filter(std::string* paramValue){
-    first_size_filter = std::stoi(*paramValue);
-}
 void NGSParameters::set_maximum_overlap_fragment_generation(std::string* paramName, std::string* paramValue){
     if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
         maximum_overlap_fragment_generation = std::stod(*paramValue);
@@ -310,11 +322,11 @@ void NGSParameters::set_maximum_overlap_fragment_generation(std::string* paramNa
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.4\" -----\n";
     }
 }
-void NGSParameters::set_induce_seq_fragment_size_distribution_path(std::string* paramName, std::string* paramValue){
+void NGSParameters::set_dsb_end_fragment_size_distribution_path(std::string* paramName, std::string* paramValue){
     if(*paramValue == "default"){                                                       // If reading default parameter file, keep the hard-coded default path computed in process_parameterFile
         return;
     }else{
-        induce_seq_fragment_size_distribution_path = *paramValue;
+        dsb_end_fragment_size_distribution_path = *paramValue;
     }
 }
 void NGSParameters::set_induce_seq_genome_fasta_path(std::string* paramValue){
@@ -350,6 +362,9 @@ void NGSParameters::set_generate_reads(std::string* paramName, std::string* para
         help_parameter(paramName);
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_generate_reads()<<"\" -----\n";
     }
+}
+void NGSParameters::set_induce_seq_parameters_path(std::string* paramValue){
+    induce_seq_parameters_path = *paramValue;
 }
 void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
@@ -590,14 +605,11 @@ int NGSParameters::get_P5_adapter_length(){
 const std::string* NGSParameters::get_P7_adapter_sequence(){
     return(&P7_adapter_sequence);
 }
-int NGSParameters::get_first_size_filter(){
-    return(first_size_filter);
-}
 double NGSParameters::get_maximum_overlap_fragment_generation(){
     return(maximum_overlap_fragment_generation);
 }
-const std::string* NGSParameters::get_induce_seq_fragment_size_distribution_path(){
-    return(&induce_seq_fragment_size_distribution_path);
+const std::string* NGSParameters::get_dsb_end_fragment_size_distribution_path(){
+    return(&dsb_end_fragment_size_distribution_path);
 }
 bool NGSParameters::get_generate_reads(){
     return(is_generate_reads);
@@ -613,6 +625,9 @@ const std::string* NGSParameters::get_induce_seq_probability_of_sequencing_path(
 }
 double NGSParameters::get_probability_of_sequencing_multiplier(){
     return(probability_of_sequencing_multiplier);
+}
+const std::string* NGSParameters::get_induce_seq_parameters_path(){
+    return(&induce_seq_parameters_path);
 }
 const std::string* NGSParameters::get_sequencer(){
     return(&sequencer);

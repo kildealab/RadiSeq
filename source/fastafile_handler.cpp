@@ -116,126 +116,23 @@
 } */
 //--------------------------------------------------------------------------------------------
 
-// DDDD
-// int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, const std::string* ref_seqPath, const std::vector<long>& chrom_end_loc) {
-//     size_t refFileSize;
-//     cum_chrom_header_sizes.clear();
-//     void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                              // Create the memory-map of the reference genome file
-//     const char* refSeqData = static_cast<char*>(refFileMM); 
-    
-//     int n_chromosomes = chrom_end_loc.size() - 1;
-//     int i = 0;
-//     int cum_chrom_header_size = 0;
-//     long pos = 0;
-//     while (i != n_chromosomes) {
-//         if (i != 0) {cum_chrom_header_size++;}                                                           // Every header except the first is preceded by the '\n' that ends the previous chromosome's sequence line
-//         if (refSeqData[pos] != '>') return 1;
-//         while (refSeqData[pos] != '\n') {
-//             cum_chrom_header_size++;
-//             pos++;
-//         }
-//         cum_chrom_header_size++;
-//         pos++;
-//         long seq_length = chrom_end_loc[i+1] - chrom_end_loc[i];                                         // Number of actual bases (excluding line-wrap newlines) in this chromosome's sequence
-//         long basesRead = 0;
-//         while (basesRead < seq_length) {                                                                 // Walk through the sequence, since it may be wrapped across multiple lines
-//             if (refSeqData[pos] == '\n') {                                                               // A newline here is a line-wrap within the sequence, not a base
-//                 cum_chrom_header_size++;
-//                 pos++;
-//             } else {
-//                 pos++;
-//                 basesRead++;
-//             }
-//         }
-//         cum_chrom_header_size++;                                                                          // Count the newline that terminates the sequence's last line
-//         pos++;
-//         cum_chrom_header_sizes.push_back(cum_chrom_header_size);
-//         if (i < n_chromosomes - 2) {
-//             i += 2;
-//         } else {
-//             i++;
-//         }
-//     }
-//     if (refSeqData[pos] != '\0') return 1;
-
-//     return 0;
-// }
-
-//DDDD
-int calculateCumChromHeaderSizes(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, char* fasta_file, size_t fasta_file_size, const std::vector<long>& chrom_end_loc) {
-    size_t i = 0;
-    long pos = 0;
-    int cum_header = 0;
-    size_t n_chrom = chrom_end_loc.size() - 1;
-    cum_chrom_header_sizes.clear();
-    chrom_headers.clear();
-
-    while (i < n_chrom) {
-        pos = cum_header + chrom_end_loc[i];
-        if (!(fasta_file[pos] == '>' || fasta_file[pos] == '\n')) {
-            return 1;
-        }
-        if (fasta_file[pos] == '\n') {                                    // Landed on the previous chromosome's sequence-terminating newline; step over it so it isn't captured as part of this header
-            pos++;
-            cum_header++;
-        }
-        if (fasta_file[pos] != '>') {
-            return 1;
-        }
-        long header_start = pos;
-        long label_end = -1;                                                                              // Position of the space separating the header label from its size field, if any
-        pos ++;
-        cum_header++;
-        while (fasta_file[pos] != '\n') {
-            if (fasta_file[pos] == ' ' && label_end == -1) {
-                label_end = pos;
-            }
-            pos++;
-            cum_header++;
-        }
-        chrom_headers.push_back(std::string(fasta_file + header_start, fasta_file + (label_end == -1 ? pos : label_end)));  // Header label text (chromosome ID only, excluding the size field)
-        cum_header++;
-        cum_chrom_header_sizes.push_back(cum_header);
-        i ++;
-    }
-
-    // The character right after the last tracked chromosome's sequence must be the newline that
-    // terminates it. What follows that newline must then be either the end of the data actually
-    // written (the rest of the memory-mapped file is left as padding spaces) or another header line
-    // (e.g. mitochondrial DNA appended after the tracked chromosomes). Anything else means the
-    // chromosome sizes used to build the template don't match what was actually written.
-    long last_seq_end = cum_header + chrom_end_loc[n_chrom];
-    if (static_cast<size_t>(last_seq_end) >= fasta_file_size || fasta_file[last_seq_end] != '\n') {
-        return 1;
-    }
-    long after_last_seq = last_seq_end + 1;
-    if (static_cast<size_t>(after_last_seq) < fasta_file_size && !(fasta_file[after_last_seq] == '>' || fasta_file[after_last_seq] == ' ')) {
-        return 1;
-    }
-
-    return 0;
-}
 
 //--------------------------------------------------------------------------------------------
 // Scans a genome fasta memory map built by buildUndamagedGenomeTemplate_ForwardOnly_MM (one
 // '>header size\n' line, where 'size' is the decimal base count of the single-line sequence that
 // follows, per chromosome, optionally followed by unwritten padding out to fasta_file_size) from
 // the very start, independently of any externally-supplied expected chromosome sizes, and
-// (re)populates cum_chrom_header_sizes, chrom_headers, and chrom_end_loc with the values actually
-// found in the file. Used as a fallback when calculateCumChromHeaderSizes finds that the SDD
-// file's declared chromosome sizes don't match the constructed genome fasta, so that downstream
-// code can keep using the fasta's real layout instead of the (incorrect) SDD-declared one.
+// (re)populates cum_chrom_header_sizes, chrom_headers, and chrom_end_loc with the values 
+// found in the file. 
+
 // chrom_end_loc[0] is always 0 (matching NGSsdd::chrom_end_loc's convention), and
 // chrom_end_loc[i+1] is the cumulative bp length of chromosomes 0..i.
 //
 // Each chromosome's sequence length is read directly from the size field stored after its header
 // rather than scanned for (counting bases, or looking for a specific terminator): since the size
-// is known up front, the position can jump straight past the sequence to the next header. This
-// also sidesteps genome_fasta_size being only an estimate of the space the file will need -- any
-// unwritten padding left after the last chromosome (e.g. createMemoryMappedFile's backing
-// allocation reads as '\0' where nothing was ever written) is simply never reached.
+// is known up front, the position can jump straight past the sequence to the next header..
 //--------------------------------------------------------------------------------------------
-void calculateActualChromEndLoc(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, std::vector<long>& chrom_end_loc, char* fasta_file, size_t fasta_file_size) {
+void calculateChromEndLoc(std::vector<int>& cum_chrom_header_sizes, std::vector<std::string>& chrom_headers, std::vector<long>& chrom_end_loc, char* fasta_file, size_t fasta_file_size) {
     cum_chrom_header_sizes.clear();
     chrom_headers.clear();
     chrom_end_loc.clear();
@@ -365,7 +262,7 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
                 if (batch_buffer.size() >= batchSize){                                                    // Check if the batch buffer is full, and write it to the memory-mapped file if needed.
                     writeBatchToMMFile(batch_buffer, position_in_MM, templateFileMapping, templateFileSize);
                 }  
-            }
+            }  
             break;
         case 2:                                                                                           // If the cell is diploid with chromosome mapping type 2 (1,2.....22,1,2.....22,X,Y)
             for(int i=0; i<2; i++){
@@ -441,19 +338,17 @@ long buildUndamagedGenomeTemplate_MM(char* templateFileMapping, std::size_t temp
 
 
 //--------------------------------------------------------------------------------------------
-// This function is a variant of buildUndamagedGenomeTemplate_MM. It only writes the strand that
+// This function is a variant of buildUndamagedGenomeTemplate_MM, used for INDUCE-seq. It only writes the strand that
 // is directly present in the reference genome; no reverse-complementary strand is generated or
 // written, and no GC-bias read weights are computed. Chromosomes are still duplicated according
 // to the ploidy/chromosome mapping (chrmMapping), the same way buildUndamagedGenomeTemplate_MM
 // does, so the layout and IDs of the output template are unchanged apart from the missing 'b'
-// (reverse-complementary) entries.
+// (reverse-complementary) entries. 
 //
-// 'cum_chrom_header_sizes' is cleared here; it is populated afterwards by calculateCumChromHeaderSizes,
-// which also validates that the written template matches the chromosome sizes expected from the SDD file.
+// The lengths of the chromosomes sequences are written in the chromosome headers, so that when reading the file,
+// chromosome sizes can be determined without reading through the whole genome
 //--------------------------------------------------------------------------------------------
 int buildUndamagedGenomeTemplate_ForwardOnly_MM(char* templateFileMapping, std::size_t templateFileSize, int nChrms, int chrmMapping, const std::string* ref_seqPath, std::vector<int>& cum_chrom_header_sizes){
-    cum_chrom_header_sizes.clear();
-
     size_t refFileSize;                                                                                 // A variable to hold the file size of the reference genome, during memory-mapping
     void* refFileMM = generateInputFileMemoryMap(*ref_seqPath, refFileSize);                             // Create the memory-map of the reference genome file
     const char* refSeqData = static_cast<char*>(refFileMM);                                              // Casting the memory-map void pointer to a const char pointer for further processing

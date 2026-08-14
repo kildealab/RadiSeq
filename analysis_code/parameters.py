@@ -16,6 +16,10 @@ FINAL_SDDS_GRAPHS_FOLDER = "Final_SDDs_graphs"
 
 FINAL_SDDS_ANALYSIS_FOLDER = "Final_SDDs_analysis"
 
+FINAL_SDDS_ALIGNMENT_DATA_FOLDER = "Final_SDDs_alignment_data"
+
+ALIGNING_TEST_CHROM_SIZES_PATH = "aligning_test/accessory_files/hg19.chrom.sizes.bed"
+
 # The experimental setups (particle, energy, dose) simulated under Final_SDDs_runs_results.
 # Every folder listed here holds many numbered simulation-run folders (one per SDD file,
 # e.g. ".../161/") for that setup, plus (once generate_dsb_location_graphs has been run) a

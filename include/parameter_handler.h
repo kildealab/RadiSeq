@@ -9,6 +9,8 @@
 class NGSParameters{
     std::string default_parameter_file;                                          // Object holding defualt parameter file path w.r.t the dataFolderPath
     std::string default_parameter_file_name;                                     // Object holding defualt parameter file name. Hard-coded value
+    std::string induce_seq_default_parameter_file;                               // Object holding the default induce_seq parameter file path w.r.t the dataFolderPath
+    std::string induce_seq_default_parameter_file_name;                          // Object holding the default induce_seq parameter file name. Hard-coded value
     std::string dataFolderPath;                                                  // Variable to hold the path to the folder containing all the required data files
     // Following variable objects hold respective parameter value(s)
     unsigned int random_seed;                                                    // RNG seed value. If user provides, fixed value will be stored, else random
@@ -63,16 +65,16 @@ class NGSParameters{
     bool is_induce_seq{false};                                                   // True if the user wishes to induce sequencing errors/artifacts
     int P5_adapter_length;                                                       // Length of the P5 adapter/primer, used when filtering DSB fragments in induce_seq
     std::string P7_adapter_sequence;                                             // P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used in induce_seq
-    int first_size_filter;                                                       // First size filter threshold, used when filtering DSB fragments in induce_seq
     double maximum_overlap_fragment_generation;                                  // Max fraction of the gap between two DSBs that their fragments may overlap by, used in induce_seq
-    std::string induce_seq_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
-    std::string induce_seq_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
+    std::string dsb_end_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
+    std::string dsb_end_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
     bool is_output_sequenced_dsbs{true};                                         // True if user wishes to output the DSBs that were sequenced in induce_seq
     std::string induce_seq_genome_fasta_path;                                    // Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq, to avoid rebuilding it every run
     std::string induce_seq_probability_of_sequencing_file_name;                  // Hard-coded default file name for the induce_seq probability of sequencing data
     std::string induce_seq_probability_of_sequencing_path;                       // Path to the file containing the probability of sequencing (by fragment length) used in induce_seq
     double probability_of_sequencing_multiplier;                                 // Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used in induce_seq
     bool is_generate_reads{true};                                                // True if reads should be generated in induce_seq. If False, the genome FASTA is not created/loaded and no read output file is created
+    std::string induce_seq_parameters_path;                                      // Path to a file containing induce_seq specific parameters. If empty, the default induce_seq parameters file is used
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -219,14 +221,11 @@ public:
     void set_P7_adapter_sequence(std::string*);                                  // function to set the P7 adapter sequence
     const std::string* get_P7_adapter_sequence();                                // function to get the P7 adapter sequence
 
-    void set_first_size_filter(std::string*);                                    // function to set the first size filter threshold
-    int get_first_size_filter();                                                 // function to get the first size filter threshold
-
     void set_maximum_overlap_fragment_generation(std::string*, std::string*);    // function to set the maximum allowed fragment overlap fraction
     double get_maximum_overlap_fragment_generation();                           // function to get the maximum allowed fragment overlap fraction
 
-    void set_induce_seq_fragment_size_distribution_path(std::string*, std::string*);  // function to set 'induce_seq_fragment_size_distribution_path'
-    const std::string* get_induce_seq_fragment_size_distribution_path();              // function to get 'induce_seq_fragment_size_distribution_path'
+    void set_dsb_end_fragment_size_distribution_path(std::string*, std::string*);  // function to set 'dsb_end_fragment_size_distribution_path'
+    const std::string* get_dsb_end_fragment_size_distribution_path();              // function to get 'dsb_end_fragment_size_distribution_path'
 
     void set_output_sequenced_dsbs(std::string*, std::string*);              // function to set "is_output_sequenced_dsbs"
     bool get_output_sequenced_dsbs();                                        // function to get "is_output_sequenced_dsbs"
@@ -242,6 +241,9 @@ public:
 
     void set_generate_reads(std::string*, std::string*);                     // function to set "is_generate_reads"
     bool get_generate_reads();                                               // function to get "is_generate_reads"
+
+    void set_induce_seq_parameters_path(std::string*);                       // function to set 'induce_seq_parameters_path'
+    const std::string* get_induce_seq_parameters_path();                     // function to get 'induce_seq_parameters_path'
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

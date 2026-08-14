@@ -29,9 +29,6 @@ acceptable_difference_in_seq_length_percent = 10                      # Specify 
 
 output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
-DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a
-                                                                      # double-strand break (DSB). Specify the distance in bp
-
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
                                                                       # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX, NovaSeq6000 and NextSeq500_v75
 
@@ -97,27 +94,10 @@ make_summary_report                         = True                    # "True" i
 
 compress_output                             = True                    # "True" if the user wishes to compress the output FASTQ files (gzip)
 
-induce_seq                                  = False                   # "True" if the user wishes to induce sequencing errors/artifacts
+induce_seq                                  = False                   # "True" if the user wishes to simulate the INDUCE-seq DSB detection method instead of regular sequencing.
+                                                                      # In this case, induce_seq_parameters_path should be specified, unless the user wishes to use default parameters.
 
-induce_seq_fragment_size_distribution_path  = default                 # Path to the file containing the DNA fragment size distribution used when induce_seq is True.
-                                                                      # Default path is hard-coded (FragmentSizeDist_induceSeq.txt), but user can change.
+induce_seq_parameters_path                  = ""                      # Path to a file containing parameters specific to INDUCE-seq. If empty, the default
+                                                                      # INDUCE-seq parameters file (InduceSeqDefaultParameters.txt) will be used to read these parameters. 
 
-induce_seq_probability_of_sequencing_path   = default                 # Path to the file containing the probability of sequencing (retaining) a fragment, indexed by fragment length, used when induce_seq is True.
-                                                                      # Default path is hard-coded (induce_seq_probability_of_sequencing.csv), but user can change.
-
-probability_of_sequencing_multiplier        = 0.94                   # Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used when induce_seq is True.
-
-output_sequenced_dsbs                       = True                   # "True" if user wishes to output the DSBs that were sequenced in induce_seq
-
-generate_reads                              = True                   # "True" if user wishes to generate reads in induce_seq. If False, the genome FASTA is not
-                                                                      # built/loaded and no read output file is created. All other induce_seq output files (DSB
-                                                                      # locations, sequenced DSBs, per-cell simulation data) are still created.
-
-induce_seq_genome_fasta_path                = ""                      # Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq.
-                                                                      # If empty, it is built fresh in the temp folder each run. If set and the file exists, it is loaded instead of rebuilt.
-                                                                      # If set and the file does not exist, it is built and saved to this path for reuse in future runs.
-
-P5_adapter_length                           = 58                      # Length of the P5 adapter/primer (in bp), used when filtering DSB fragments in induce_seq
-
-P7_adapter_sequence                         = AGATCGGAAGAGCACACGTCTGAACTCCAGTCACIIIIIIATCTCGTATGCCGTCTTCTGCTTG  # P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used when induce_seq is True.
-                                                                      # 'I' characters are index placeholders replaced with random bases at read-generation time.
+                                                                      

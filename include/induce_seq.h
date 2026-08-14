@@ -9,13 +9,11 @@
 class InduceSeq {
 
 public:
-    InduceSeq(NGSsdd& sddData);                                                       // Lightweight constructor: binds sdd_data only. Use when induce_seq is not requested, to avoid the cost of set_genome_data
-    InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string tempFolderPath); // Also sets the parameter member and calls set_genome_data, which is computationally intensive
+    InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string tempFolderPath); // Sets the parameter member and calls set_genome_data, which is computationally intensive
 
     void init_set_data_holders(int nGroupThreads);                                   // function to set/initialize all the DSB data holders for processing
     void reset_permanent_damage_vecs(int groupTID);                                   // function to empty the permanent vectors after each exposure
 
-    void set_parameter(NGSParameters param);                                         // function to set the parameter member
     void set_genome_data(std::string& tempFolderPath);                               // function to set genome data by memory-mapping the reference genome
     void find_DSBs(int DSBthreshold, int groupTID);                                  // function to find DSBs from backbone breaks on opposite strands within a threshold and on the same chromosome
     void save_dsb_locations(int cell_number, int groupTID);                          // function to save every element of dsb_locations[groupTID] to a csv file
@@ -27,7 +25,7 @@ public:
     void find_base_pair_damages(int groupTID);                                       // function to find base pair damages on the DSB strands
     void get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_damages, std::vector<long>& dsb_strand, bool is_left);  // function to extract the DNA sequence for a DSB strand from the genome
     void generate_simulation_output(int cell_number, int groupTID, int num_available_threads, int threadIDOffset);  // function to induce sequencing from DSB fragments
-    void run_simulation(int cell_number, int groupTID, int threadID, int NworkerThreads, int threadIDOffset);
+    void run_simulation(int cell_number, int groupTID, int NworkerThreads, int threadIDOffset);
     std::vector<std::vector<long>>& get_dsb_locations(int groupTID);                 // function to get the DSB locations
     int get_random_fragment_length(int threadID);                                    // function to sample a fragment length from fragment_size_distribution
     void close();                                                                    // function to release resources held by this object (e.g. unmap genome_fasta)
@@ -59,6 +57,6 @@ private:
 
     int second_size_filter{3};                                                       // Second size filter threshold
     
-
+    
 };
 #endif

@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <chrono>
 #include <omp.h>
+#include <optional>
 
 #include "support_functions.h"
 #include "fileio.h"
@@ -66,8 +67,14 @@ int main(int argc, char* argv[]){
     std::vector<double> ref_chrm_weights;                                                                       // Vector to store the weights of each chromosomes scaled according to its length
     double average_GC_content{0.0};                                                                             // Variable to hold the average GC content of the reference genome. It is (num of G+C)/(ref_seq_length)
     long ref_seq_length{0};                                                                                     // Length of the reference sequence genome
+    
+    // induceSeq is needed only if the induce_seq parameter is true. If not, it is left unconstructed to avoid the cost of set_genome_data
+    std::optional<InduceSeq> induceSeq;
+    if (parameters.get_induce_seq()) {
+        induceSeq.emplace(SDDdata, parameters, tempFolderPath);
+    } else {
+        //induceSeq does not require the construction of any of this data
 
-    if (!parameters.get_induce_seq()) {
         std::cout<<"\n Constructing an un-damaged cell model"<<std::endl;
         // Generating an undamaged cell genome template. This is used later to create damaged cell genomes.
         long ref_genomeFile_size = fileSize_bytes(*parameters.get_reference_genome());                              // Find the size of the reference sequence file
@@ -79,27 +86,8 @@ int main(int argc, char* argv[]){
         ref_seq_length = buildUndamagedGenomeTemplate_MM(genomeTemplate_data, templateSize, SDDdata.get_num_chrom(), SDDdata.get_chrom_mapping(), parameters.get_reference_genome(), ref_chrm_weights, &average_GC_content, parameters.get_GC_binSize());
         long one_fasta_size = fileSize_bytes(tempFolderPath+"/Undamaged_cell.fa");                                  // Calculate the size of the undamaged cell fasta file. This will be the size of every fasta file
         checkStorageSize(parameters, SDDdata, one_fasta_size);                                                      // Check if there is enough storage space to run this program with the given parameters
-    }
 
-    
-
-    
-    
-    
-    
-    // std::cout << "succ: " << succ << "\n";
-    // for (long e : cum_chrom_header_sizes) {
-    //     std::cout << "head: " << e << "\n";
-    // }
-    // std::cout << "nchromhead: " << cum_chrom_header_sizes.size() << "\n";
-
-    // induceSeq is needed only if the induce_seq parameter is true. If not, induceSeq is created with a not computationally intensive constructor
-    InduceSeq induceSeq = parameters.get_induce_seq()                                                               
-        ? InduceSeq(SDDdata, parameters, tempFolderPath)
-        : InduceSeq(SDDdata);
-
-    // Make sure the difference between the reference genome length and the MC model length is within the required limit
-    if (!parameters.get_induce_seq()) {
+        // Make sure the difference between the reference genome length and the MC model length is within the required limit
         double percent_diff_seq_length = ((std::abs(SDDdata.get_sdd_genome_length()-ref_seq_length))/ref_seq_length)*100;
         if(*parameters.get_sequencer() != "test"){                                                                  // For all scenarios other than the test run,
             if(percent_diff_seq_length>parameters.get_max_acceptable_seq_length_difference()){                      // If the reference seq length and the monte carlo model seq length are different more than the value specified
@@ -123,6 +111,7 @@ int main(int argc, char* argv[]){
     }
     
 
+
     // Read each cell (exposure) damage data from the SDD file, adjust the damages according to the actual dose delivered if necessary,
     // then combine multiple radiation damages on the same cell if needed, find DSB locations and then build a damaged genome FASTA file for each cell   
     // But do all that, ONLY if the number of damaged data (exposure) is more than 0
@@ -132,7 +121,7 @@ int main(int argc, char* argv[]){
     int nThreads_User = parameters.get_number_of_threads();                                                         // Variable holding the number of threads the user requesting for parallel processing
     omp_set_nested(1);                                                                                              // Enable nested parallelism 
     omp_set_num_threads(nThreads_User);                                                                             // Set the number of threads available for OMP as the number user requested
-        
+    
     if(0<SDDdata.get_num_of_damagedCells_toBuild()){                                                                // Attempt building damaged cells only if we need to build atleast one damaged cell
         std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- "<<std::endl;  
         int threadGroups{nThreads_User};                                                                            // Variable to hold the number of thread groups we want to create
@@ -149,15 +138,17 @@ int main(int argc, char* argv[]){
             {
                 int nGroupthreads = omp_get_num_threads();                                                          // Get the number of thread groups OMP actually created
                 SDDdata.init_set_data_holders(nGroupthreads);                                                       // Resize and initiate all the data holder that store group-wise data
-                induceSeq.init_set_data_holders(nGroupthreads);                                                 // Resize and initiate all the DSB data holders that store group-wise data
+                if (parameters.get_induce_seq()) {
+                    induceSeq->init_set_data_holders(nGroupthreads);                                            // Resize and initiate all the DSB data holders that store group-wise data
+                }
             }
             #pragma omp barrier                                                                                     // Wait here till all thread groups reach this point
             #pragma omp for                                                                                         // Split the thread group over the for loop
             for(int i=0; i<SDDdata.get_num_of_damagedCells_toBuild(); i++){                                         // Iterate over each exposure (cell) data, for the cells that we want to build
                 int groupTID = omp_get_thread_num();
                 int workerThreads = threadPerGroup;
-                if(groupTID<xtraThreads){workerThreads+=1;}                                                         // Distribute extra threads to the groups. Keyed on groupTID (not i) so that a group's thread budget is stable across all the cells it processes
-                int threadIDOffset = groupTID*threadPerGroup + std::min(groupTID,xtraThreads);                     // Base of this group's private, non-overlapping slice of the [0,nThreads_User) global thread-ID space used for RNG/ART per-thread state
+                if(groupTID<xtraThreads){workerThreads+=1;}                                                         // Distribute extra threads to the groups, one for the first xtraThread groups. 
+                int threadIDOffset = groupTID*threadPerGroup + std::min(groupTID,xtraThreads);                      // Base of this group's private, non-overlapping slice of the [0,nThreads_User) global thread-ID space used for RNG/ART per-thread state
                 std::vector<std::string> lineStack;                                                                 // Temporary vector to hold the SDD line data for each exposure only
                 int sddCounter = 0;                                                                                 // Temporary variable to count the SDD files parsed
                 #pragma omp parallel num_threads(workerThreads) shared(lineStack,sddCounter)
@@ -178,29 +169,8 @@ int main(int argc, char* argv[]){
                         j = sddCounter;                                                                             // Update the local flag so that all the threads get the updated value
                     }
                 }
-                // #pragma omp critical
-                // {
-                //     for (long dam : SDDdata.get_basestrand1_damage_loc(groupTID)) {
-                //         std::cout << "base 1: " << dam << "\n";
-                //     }
-                //     for (long dam : SDDdata.get_backbone1_break_loc(groupTID)) {
-                //         std::cout << "back 1: " << dam << "\n";
-                //     }
-                //     // for (long chrom : *SDDdata.get_chrom_end_loc()) {
-                //     //     std::cout << "chromosome: " << chrom << "\n";
-                //     // }
-                //     for (std::vector<long> dsb_location : induceSeq.get_dsb_locations(groupTID)) {
-                //         std::cout << "dsb: " << dsb_location[0] << ",  " << dsb_location[1] << "\n";
-                //     }
-                // }
-
-                // #pragma omp critical
-                // {
-                //     std::cout << "groupTID: " << groupTID << "\n";
-                // }
                 if (parameters.get_induce_seq()) {
-                    int threadID = omp_get_thread_num(); 
-                    induceSeq.run_simulation(i, groupTID, threadID, workerThreads, threadIDOffset);
+                    induceSeq->run_simulation(i, groupTID, workerThreads, threadIDOffset);
                 } else {
                     //SDDdata.find_DNA_breakPoints(parameters.get_dsb_threshold());
                     //-------------- Stage 3: Generating damaged cell genomes -----------------//
@@ -214,7 +184,9 @@ int main(int argc, char* argv[]){
 
                 
                 SDDdata.reset_permanent_damage_vecs(groupTID);                                                      // Reset all the bigger permanent damage vectors including DNAbreakpoints before processing the next cell
-                induceSeq.reset_permanent_damage_vecs(groupTID);                                                // Reset all the DSB-related permanent vectors before processing the next cell
+                if (parameters.get_induce_seq()) {
+                    induceSeq->reset_permanent_damage_vecs(groupTID);                                           // Reset all the DSB-related permanent vectors before processing the next cell
+                }
             }
         }
         std::cout<<"\n Building of all the damaged cell genomes is now complete "<<std::endl;
@@ -223,7 +195,7 @@ int main(int argc, char* argv[]){
     }
     
     if (parameters.get_induce_seq()) {
-        induceSeq.close();
+        induceSeq->close();
     } else {
 
         munmap(genomeTemplate_data, templateSize);                                                                  // Unmap the memory-map to avoid memory leaks after use
