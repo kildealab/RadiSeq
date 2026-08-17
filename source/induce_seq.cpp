@@ -75,9 +75,6 @@ void InduceSeq::init_set_data_holders(int nGroupThreads){
     dsb_blunted_ends.clear();
     dsb_blunted_ends.resize(nGroupThreads);
 
-    n_dsb_blunted_ends.clear();
-    n_dsb_blunted_ends.resize(nGroupThreads);
-
     dsb_fragments_left.clear();
     dsb_fragments_left.resize(nGroupThreads);
 
@@ -118,10 +115,10 @@ void InduceSeq::reset_permanent_damage_vecs(int groupTID){                      
 void InduceSeq::run_simulation(int cell_number, int groupTID, int NumWorkerThreads, int threadIDOffset) {
     find_DSBs(parameter.get_dsb_threshold(), groupTID);
     save_dsb_locations(cell_number, groupTID);
-    get_blunted_ends(groupTID);
+    load_blunted_ends(groupTID);
     save_dsb_blunted_ends(cell_number, groupTID);
     //threadIDOffset is used as the threadID for these 2 single-threaded functions, since this will be the global ID of the master (0th) thread in the thread group
-    get_dsb_fragments(groupTID, threadIDOffset); 
+    load_dsb_fragments(groupTID, threadIDOffset); 
     filter_dsb_fragments(groupTID, threadIDOffset);
     filter_dsb_strands_ssd(groupTID);
     find_base_pair_damages(groupTID);
@@ -255,7 +252,7 @@ void InduceSeq::save_dsb_locations(int cell_number, int groupTID) {
 }
 
 // Saves every element of dsb_blunted_ends[groupTID] to a csv file, one row per blunted end (see
-// get_blunted_ends for how these fields are populated, and for the field format).
+// load_blunted_ends for how these fields are populated, and for the field format).
 void InduceSeq::save_dsb_blunted_ends(int cell_number, int groupTID) {
     std::string filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_dsb_blunted_ends.csv";
     std::ofstream blunted_ends_file(filename.c_str());
@@ -277,7 +274,7 @@ void InduceSeq::close() {
 // strand1 (backbone1) location of the dsb that caused the left edge, strand2 (backbone2) location of the dsb that caused the left edge,
 // strand1 (backbone1) location of the dsb that caused the right edge, strand2 (backbone2) location of the dsb that caused the right edge}
 // A cluster of chained/connected dsbs can have the left edge caused by a different dsb than the right edge, so both are tracked separately.
-void InduceSeq::get_blunted_ends(int groupTID) {
+void InduceSeq::load_blunted_ends(int groupTID) {
     dsb_blunted_ends[groupTID].clear();
     std::vector<std::vector<long>> dsb_locs = get_dsb_locations(groupTID);
     // base locations start at 1, and chromosome indices at 0
@@ -300,7 +297,6 @@ void InduceSeq::get_blunted_ends(int groupTID) {
             dsb_blunted_ends[groupTID].push_back(new_dsb_blunted_ends);
         }
     }
-    n_dsb_blunted_ends[groupTID] = static_cast<int>(dsb_blunted_ends[groupTID].size());
 }
 
 // Populates the dsb_fragments_left and dsb_fragments_right arrays with all the dsb fragments in the genome after DNA fragmentation.
@@ -308,7 +304,7 @@ void InduceSeq::get_blunted_ends(int groupTID) {
 // fragment's other end, chromosome index, strand1 (backbone1) location of the dsb that caused this blunted end,
 // strand2 (backbone2) location of the dsb that caused this blunted end}. For left fragments, element
 // 0 > element 1 ; for right fragments, element 1 > element 0 
-void InduceSeq::get_dsb_fragments(int groupTID, int threadID) {
+void InduceSeq::load_dsb_fragments(int groupTID, int threadID) {
     // left fragments are those that extend from a dsb end towards lesser genome positions. 
     // they extend leftward when seen on a DNA diagram drawn with the usual convention where the top strand is 5' to 3'
     dsb_fragments_left[groupTID].clear(); 
@@ -453,7 +449,11 @@ void InduceSeq::filter_dsb_fragments(int groupTID, int threadID) {
 }
 
 // Populates the dsb_strands_left and right arrays to contain denatured DNA strands.
-// It filters strands based on whether a single strand break is present on the strand, which would cause the strand to not be sequenced 
+// dsb_strands are stored as vectors in the same format as dsb_fragments (see load_dsb_fragments): {location of the
+// fragment's end at the DSB-caused blunted end, location of the fragment's other end, chromosome index,
+// strand1 (backbone1) location of the dsb that caused this blunted end, strand2 (backbone2) location of the
+// dsb that caused this blunted end}. Each entry is copied through unchanged from the corresponding dsb_fragment.
+// It filters strands based on whether a single strand break is present on the strand, which would cause the strand to not be sequenced
 void InduceSeq::filter_dsb_strands_ssd(int groupTID) {
     dsb_strands_left[groupTID].clear();
     dsb_strands_right[groupTID].clear();
@@ -692,6 +692,8 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
     }
 }
 
+// Sets dna_seq to be the DNA sequence of a dsb_strand, in the order that it will generate a read. bp_damages is an array specifying the 
+// locations of damages on the strand; these bases are replaced by N. is_left specifies whether the strand came from dsb_strands_left (generates a backward read) or dsb_strands_right (forward read)
 void InduceSeq::get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_damages, std::vector<long>& dsb_strand, bool is_left) {
     int chrom_idx = dsb_strand[2];
     long start_char_i = dsb_strand[0] + cum_chrom_header_sizes[chrom_idx] - 1;
@@ -719,6 +721,8 @@ void InduceSeq::get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_dam
     }
 }
 
+// returns a random fragment length according to the fragment size distribution parameter
+// thread ID is a global thread index (from 0 to total number of threads used in program - 1)
 int InduceSeq::get_random_fragment_length(int threadID) {
     float rand_val = rng::rand_float(0.0f, 1.0f, threadID);
     int fragment_length = fragment_size_distribution.upper_bound(rand_val)->second;
