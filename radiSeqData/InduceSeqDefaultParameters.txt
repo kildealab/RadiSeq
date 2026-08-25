@@ -5,10 +5,11 @@ DSB_threshold_in_bp                         = 10                      # Maximum 
                                                                       # double-strand break (DSB). 
 
 dsb_end_fragment_size_distribution_path     = default                 # Path to the file containing the size distribution of DNA fragments from DSB ends.
-                                                                      # Default path is hard-coded (FragmentSizeDist_induceSeq.txt), but user can change.
+                                                                      # Default path is hard-coded (FragmentSizeDist_induceSeq.txt). 
+                                                                      # This default distribution is taken from the graph on pg. 73 of Dobbs' PhD thesis (https://orca.cardiff.ac.uk/id/eprint/143377/2/Felix_Dobbs_PhD_Thesis_2021.pdf)
 
-probability_of_sequencing_path              = default                 # Path to the file containing the probability of sequencing (retaining) a fragment, indexed by fragment length, used when induce_seq is True.
-                                                                      # Default path is hard-coded (induce_seq_probability_of_sequencing.csv), but user can change.
+probability_of_sequencing_path              = default                 # Path to the file containing the probability of sequencing (retaining) a fragment, indexed by fragment length, not including P5 and P7 adapters.
+                                                                      # Default path is hard-coded (induce_seq_probability_of_sequencing.csv). Sizes above those explicitly listed in the file are taken to have the same probability as that of the largest listed fragment size. 
 
 probability_of_sequencing_multiplier        = 0.2                     # Flat probability (independent of anything else) that a DSB fragment is sequenced. 
                                                                       # One can obtain equivalent results by setting this parameter to 1, and then randomly removing reads after the simulation.
@@ -33,7 +34,6 @@ P7_adapter_sequence                         = AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC
 maximum_overlap_fragment_generation         = 0.3                     # Maximum fraction of the length of a DNA segment between two DSB edges from neibouring DBSs that generated fragments are allowed to overlap by.
                                                                       # If 2 generated fragments overlap by more than this, it is taken that the DNA segment is not broken during fragmentation, and neither DSB end produces a read. 
                                                                       # In the case of an allowable overlap, the DNA segment is broken in the midpoint of the overlap. 
-                                                                      
                                                                       # This value should be a double in the range [0,1]
 
 induce_seq_genome_fasta_path                = ""                      # Optional path to save/load an undamaged genome FASTA file built in a specific format from the reference genome.

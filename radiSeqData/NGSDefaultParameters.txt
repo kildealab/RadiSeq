@@ -97,7 +97,6 @@ compress_output                             = True                    # "True" i
 induce_seq                                  = False                   # "True" if the user wishes to simulate the INDUCE-seq DSB detection method instead of regular sequencing.
                                                                       # In this case, induce_seq_parameters_path should be specified, unless the user wishes to use default parameters.
 
-induce_seq_parameters_path                  = ""                      # Path to a file containing parameters specific to INDUCE-seq. If empty, the default
-                                                                      # INDUCE-seq parameters file (InduceSeqDefaultParameters.txt) will be used to read these parameters. 
+induce_seq_parameters_path                  = ""                      # Path to a file containing parameters specific to INDUCE-seq. These parameters can also be listed in the main parameter file. 
 
                                                                       
