@@ -88,46 +88,46 @@ The RadiSeqProfiler program can be used to generate error profiles of custom Ill
 
 The user should specify all the input parameters for the simulation in a parameter text(.txt) file. Users can make any text file a parameter file with a filename
 of their choosing, as long as the contents of the file are formatted in a specified parameter name and value pair. Input values can be given in the format:
-`Parameter Name = Parameter Value   #comment`. The list of all acceptable parameter names is given in the table below. All the parameters are optional except the path to the SDD file. 
+`Parameter Name = Parameter Value   #comment`. The list of all acceptable parameter names is given in the table below. All the parameters are optional except the path to the SDD file. There is a set of parameters that are used only for the INDUCE-seq simulation, which are listed in a separate table. Some of the parameters below are also used in the INDUCE-seq simulation, as indicated in the table. 
 
-| Parameter name | Description | Parameter value | 
-|----------|------------|------------|
-| sddFilePath | Complete path to the SDD file(s) | Comma separated list of paths (string) |
-| merge_damages_from_multiple_particles | Flag to indicate if the user wishes to define a single genome by combining damages from multiple SDD files | 'True' or 'False' |
-| number_of_particles_to_merge | Number of SDD files from individual primary simulations to combine | Number (integer) |
-| primary_particles_simulated | Names of primary particles that introduced the damages that are going to be combined into a single genome | Comma-separated list of names  (strings) |
-| adjust_damages_with_actual_dose | Flag to indicate if the user wishes to scale the number of damages with the actual dose delivered and it is different from the expected dose | 'True' or 'False' |
-| actual_dose_delivered_data | Complete path to the file containing the actual dose delivered in each run. One file is expected for each SDD file specified | Comma-separated list of paths (string) |
-| reference_genome_FASTAfile | Complete path to the reference genome file | path to file (sting) |
-| acceptable_difference_in_seq_length_percent | Acceptable difference in the lengths of the reference genome provided and the genome length of the Monte Carlo model | Percentage (double) |
-| number_of_cells_in_sample | Total number of cells the user assumes to have in your sample. This is different from the number of cells to sequence | Number (integer) |
-| number_of_cells_to_sequence | Number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected from the number of cells in the sample | Number (integer) |
-| illumina_sequencer | Name of the Illumina sequencer to be used for sequencing from the in-built list | 'HiSeq1000', 'HiSeq2000', 'HiSeq2500_v125', 'HiSeq2500_v150', 'HiSeqX', 'NovaSeq6000' and 'Custom' |
-| custom_read1_quality_profile_path | Complete path to the read 1 quality profile file when custom sequencer is chosen | path to file (string) |
-| custom_read2_quality_profile_path | Complete path to the read 2 quality profile file when custom sequencer is chosen and paired-end sequencing is needed | path to file (string) |
-| single_or_bulk_sequencing | Flag to specify if single-cell or bulk-cell sequencing is to be performed | 'single' or 'bulk' |
-| do_paired_end_sequencing | Flag to indicate if paired-end sequencing to be performed | 'True' or 'False' |
-| fraction_of_other_oriented_read_pairs | The fraction of read pairs needs to be in orientations other than forward-reverse (FR) | Number in the range [0,1] (double) |
-| fragment_size_distribution_path | Complete path to the text (.txt) file that stores the fragment size distribution | Path to file (string) |
-| min_DNA_fragment_length | Minimum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
-| max_DNA_fragment_length | Maximum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
-| mode_DNA_fragment_length | Mode DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) |
-| beta_of_beta_distribution | Beta parameter value for the beta distribution that will be used to represent the fragment size distribution | Number (double) |
-| read_length | Length of the read (in bp) to be generated | Number (integer) |
-| total_read_coverage | Total read coverage the user wants to get from this sequencing. If single-cell sequencing the read coverage will get distributed over the total number of cells sequenced | Number (integer) |
-| coverage_distribution | Read coverage distribution mode to be used in single-cell sequencing | 'Uniform' or be 'MDA' |
-| degree_of_GC_bias | Slope of the linear portions of the triangular function used for GC bias | Number (double) |
-| bin_size_for_GC_bias_estimation | The bin size to be used to calculate the GC fraction and bias | Number (integer) |
-| read1_insertion_error_rate | Insertion error rate for read 1. Expects a double value between 0 and 1 | Number (double) |
-| read1_deletion_error_rate | Deletion error rate for read 1. Expects a double value between 0 and 1 | Number (double) |
-| read2_insertion_error_rate | Insertion error rate for read 2. Expects a double value between 0 and 1 | Number (double) |
-| read2_deletion_error_rate | Deletion error rate for read 2. Expects a double value between 0 and 1 | Number (double) |
-| read_artifacts_rate | The rate of chimera artifact formation in read 1 and 2 combined | Number in the range [0,1] (double) |
-| output_directory_path | Complete path to the directory where the output fastq files and the run summary file should be stored | Path to directory (string) |
-| output_FASTQ_filename_prefix | Prefix for the sequenced output FASTQ file (omit file extension) | String |
-| make_summary_report | Flag to indicate if the user wishes to generate a summary report file at the end of run | 'True' or 'False' |
-| random_seed | Seed number for the random number generator to be initialized with a fixed seed. A default value of 0 indicates that the system will automatically generate random seeds completely random | Number (integer) |
-| number_of_threads | Number of threads to be used for a multithreaded run. Default value is 1 | Number (integer) |
+| Parameter name | Description | Parameter value | Used in INDUCE-seq simulation |
+|----------|------------|------------|------------|
+| sddFilePath | Complete path to the SDD file(s) | Comma separated list of paths (string) | Yes |
+| merge_damages_from_multiple_particles | Flag to indicate if the user wishes to define a single genome by combining damages from multiple SDD files | 'True' or 'False' | Yes |
+| number_of_particles_to_merge | Number of SDD files from individual primary simulations to combine | Number (integer) | Yes |
+| primary_particles_simulated | Names of primary particles that introduced the damages that are going to be combined into a single genome | Comma-separated list of names  (strings) | Yes |
+| adjust_damages_with_actual_dose | Flag to indicate if the user wishes to scale the number of damages with the actual dose delivered and it is different from the expected dose | 'True' or 'False' | Yes |
+| actual_dose_delivered_data | Complete path to the file containing the actual dose delivered in each run. One file is expected for each SDD file specified | Comma-separated list of paths (string) | Yes |
+| reference_genome_FASTAfile | Complete path to the reference genome file | path to file (sting) | Yes |
+| acceptable_difference_in_seq_length_percent | Acceptable difference in the lengths of the reference genome provided and the genome length of the Monte Carlo model | Percentage (double) | Yes |
+| number_of_cells_in_sample | Total number of cells the user assumes to have in your sample. This is different from the number of cells to sequence | Number (integer) | Yes |
+| number_of_cells_to_sequence | Number of cells (damaged and undamaged) to be sequenced. These many cells will be randomly selected from the number of cells in the sample | Number (integer) | Yes |
+| illumina_sequencer | Name of the Illumina sequencer to be used for sequencing from the in-built list | 'HiSeq1000', 'HiSeq2000', 'HiSeq2500_v125', 'HiSeq2500_v150', 'HiSeqX', 'NovaSeq6000' and 'Custom' | Yes |
+| custom_read1_quality_profile_path | Complete path to the read 1 quality profile file when custom sequencer is chosen | path to file (string) | Yes |
+| custom_read2_quality_profile_path | Complete path to the read 2 quality profile file when custom sequencer is chosen and paired-end sequencing is needed | path to file (string) | No |
+| single_or_bulk_sequencing | Flag to specify if single-cell or bulk-cell sequencing is to be performed | 'single' or 'bulk' | No |
+| do_paired_end_sequencing | Flag to indicate if paired-end sequencing to be performed | 'True' or 'False' | No |
+| fraction_of_other_oriented_read_pairs | The fraction of read pairs needs to be in orientations other than forward-reverse (FR) | Number in the range [0,1] (double) | No |
+| fragment_size_distribution_path | Complete path to the text (.txt) file that stores the fragment size distribution | Path to file (string) | No |
+| min_DNA_fragment_length | Minimum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) | No |
+| max_DNA_fragment_length | Maximum DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) | No |
+| mode_DNA_fragment_length | Mode DNA fragment length (in bp) to be generated if paired-end sequencing | Number (integer) | No |
+| beta_of_beta_distribution | Beta parameter value for the beta distribution that will be used to represent the fragment size distribution | Number (double) | No |
+| read_length | Length of the read (in bp) to be generated | Number (integer) | Yes |
+| total_read_coverage | Total read coverage the user wants to get from this sequencing. If single-cell sequencing the read coverage will get distributed over the total number of cells sequenced | Number (integer) | No |
+| coverage_distribution | Read coverage distribution mode to be used in single-cell sequencing | 'Uniform' or be 'MDA' | No |
+| degree_of_GC_bias | Slope of the linear portions of the triangular function used for GC bias | Number (double) | No |
+| bin_size_for_GC_bias_estimation | The bin size to be used to calculate the GC fraction and bias | Number (integer) | No |
+| read1_insertion_error_rate | Insertion error rate for read 1. Expects a double value between 0 and 1 | Number (double) | Yes |
+| read1_deletion_error_rate | Deletion error rate for read 1. Expects a double value between 0 and 1 | Number (double) | Yes |
+| read2_insertion_error_rate | Insertion error rate for read 2. Expects a double value between 0 and 1 | Number (double) | No |
+| read2_deletion_error_rate | Deletion error rate for read 2. Expects a double value between 0 and 1 | Number (double) | No |
+| read_artifacts_rate | The rate of chimera artifact formation in read 1 and 2 combined | Number in the range [0,1] (double) | No |
+| output_directory_path | Complete path to the directory where the output fastq files and the run summary file should be stored | Path to directory (string) | Yes |
+| output_FASTQ_filename_prefix | Prefix for the sequenced output FASTQ file (omit file extension) | String | Yes |
+| make_summary_report | Flag to indicate if the user wishes to generate a summary report file at the end of run | 'True' or 'False' | Yes |
+| random_seed | Seed number for the random number generator to be initialized with a fixed seed. A default value of 0 indicates that the system will automatically generate random seeds completely random | Number (integer) | Yes |
+| number_of_threads | Number of threads to be used for a multithreaded run. Default value is 1 | Number (integer) | Yes |
 
 
 ## Use cases
@@ -156,6 +156,7 @@ The DNA fragment size distribution is modelled as a beta distribution in RadiSeq
 A unimodal distribution is desirable for GC bias in sequencing. i.e, both genomic regions with higher GC content (GC-rich) and lower GC content (AT-rich) are expected to be sampled less than a region that has more balanced GC content. RadiSeq uses a combination of two linear models to form a triangular distribution as an approximation of the underlying GC bias in a simulation. Users can control the degree of this bias using the input parameter called 'degree_of_GC_bias'. This parameter specifies the slope of the linear models. By default a slope of 0 is used in RadiSeq. If GC bias model needs to be enable, one should specify a degree_of_GC_bias higher than 0. Higher the degree of bias, higher the slope and hence we get higher GC bias. GC bias is calculated over a sliding window of size equal to the read length.
 **Note**: The simulation will take longer with increasing bias. 
 
+## INDUCE-seq simulation
 
 ## Acknowledgements
 
