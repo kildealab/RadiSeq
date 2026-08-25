@@ -38,6 +38,9 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
     }
     
     dataFolderPath = *dataPath;
+    while(!dataFolderPath.empty() && dataFolderPath.back() == '/'){                                    // Strip any trailing slash(es) from RADISEQ_DATA_DIR, since the data filenames below already start with '/'
+        dataFolderPath.pop_back();
+    }
     if(!checkFolderExists(dataFolderPath.c_str())){                // Check if the environment variable set by the user is pointing to the right directory
         std::cerr<<"\n ERROR: Unable to find the environment variable \"RADISEQ_DATA_DIR\" path correctly. The path provided is "<<dataFolderPath<<"\n";
         exit(EXIT_FAILURE);
@@ -51,19 +54,30 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
 
     // Continue if parameter file is present and set all parameter values
     readParameterFile(&default_parameter_file, parameter);         // Read default parameter file first to set default parameter values
+    current_param_source = ParamSource::MAIN_USER;                 // Track every parameter name the user sets here, so an induce_seq parameter set in this file isn't silently lost below
     readParameterFile(parameterfile, parameter);                   // Read user-specified parameter file to overwrite default parameter values
+    current_param_source = ParamSource::NONE;
 
-    // If induce_seq is requested, read the induce_seq specific parameters from the appropriate file
+    // If induce_seq is requested, read the induce_seq specific parameters. The default file is always read
+    // first so every induce_seq-specific parameter has a value; if the user also specified induce_seq_parameters_path,
+    // that file is read afterwards as an overlay, so only the parameters it actually mentions get overridden and
+    // everything else keeps its value from InduceSeqDefaultParameters.txt. Any induce_seq parameter that the user
+    // already set in the main parameter file is left untouched by this default pass (see set_parameters), and is
+    // only overridden again with a warning if the induce_seq parameter file below also sets it.
     if(get_induce_seq()){
         std::string empty_path = "\"\"";                                              // Empty string parameter values are stored literally as "" (unstripped quotes)
-        if(induce_seq_parameters_path.empty() || induce_seq_parameters_path == empty_path){ // If no path is specified, use the default induce_seq parameters file
-            readParameterFile(&induce_seq_default_parameter_file, parameter);
-        }else if(!checkFileExists(&induce_seq_parameters_path)){                      // If a path is specified but the file cannot be found, exit gracefully
-            std::cerr<<"\n ERROR: Unable to read the induce_seq parameter file : "<< induce_seq_parameters_path<<'\n';
-            exit(EXIT_FAILURE);
-        }else{
+        current_param_source = ParamSource::INDUCE_SEQ_DEFAULT;
+        readParameterFile(&induce_seq_default_parameter_file, parameter);
+        current_param_source = ParamSource::NONE;
+        if(!(induce_seq_parameters_path.empty() || induce_seq_parameters_path == empty_path)){ // If a custom path was specified, apply it on top of the defaults
+            if(!checkFileExists(&induce_seq_parameters_path)){                        // If the specified file cannot be found, exit gracefully
+                std::cerr<<"\n ERROR: Unable to read the induce_seq parameter file : "<< induce_seq_parameters_path<<'\n';
+                exit(EXIT_FAILURE);
+            }
             std::cout<<"\n Successfully read the induce_seq parameter file: "<< induce_seq_parameters_path<<'\n';
+            current_param_source = ParamSource::INDUCE_SEQ_USER;
             readParameterFile(&induce_seq_parameters_path, parameter);
+            current_param_source = ParamSource::NONE;
         }
     }
 
@@ -85,6 +99,24 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
 // on the parameterName passed
 //--------------------------------------------------------------------------------------------
 void NGSParameters::set_parameters(std::string* paramName, std::string* paramValue){
+    switch(current_param_source){
+        case ParamSource::MAIN_USER:
+            main_file_param_names.insert(*paramName);                                // Remember this name so the induce_seq default/user files below can detect a conflict with it
+            break;
+        case ParamSource::INDUCE_SEQ_DEFAULT:
+            if(main_file_param_names.count(*paramName) > 0){                         // Already explicitly set in the main parameter file
+                return;                                                              // Keep that value instead of overwriting it with the induce_seq default
+            }
+            break;
+        case ParamSource::INDUCE_SEQ_USER:
+            if(main_file_param_names.count(*paramName) > 0){                         // Also explicitly set in the main parameter file
+                std::cerr<<"\n WARNING: Parameter \""<<*paramName<<"\" is set in both the main parameter file and the induce_seq parameter file. "
+                <<"Using the value from the induce_seq parameter file: \""<<*paramValue<<"\"\n";
+            }
+            break;
+        case ParamSource::NONE:
+            break;
+    }
     if (*paramName == "random_seed"){
         set_random_seed(paramValue);
     }
@@ -223,6 +255,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "output_sequenced_dsbs"){
         set_output_sequenced_dsbs(paramName, paramValue);
     }
+    else if (*paramName == "output_dsbs"){
+        set_output_dsbs(paramName, paramValue);
+    }
     else if (*paramName == "induce_seq_genome_fasta_path"){
         set_induce_seq_genome_fasta_path(paramValue);
     }
@@ -237,6 +272,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     }
     else if (*paramName == "induce_seq_parameters_path"){
         set_induce_seq_parameters_path(paramValue);
+    }
+    else if (*paramName == "remove_strands_with_SSBs"){
+        set_remove_strands_with_SSBs(paramName, paramValue);
     }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
@@ -355,6 +393,14 @@ void NGSParameters::set_output_sequenced_dsbs(std::string* paramName, std::strin
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_sequenced_dsbs()<<"\" -----\n";
     }
 }
+void NGSParameters::set_output_dsbs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_output_dsbs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_dsbs()<<"\" -----\n";
+    }
+}
 void NGSParameters::set_generate_reads(std::string* paramName, std::string* paramValue){
     if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
         is_generate_reads = (lowercaseString(paramValue) == "true");
@@ -365,6 +411,14 @@ void NGSParameters::set_generate_reads(std::string* paramName, std::string* para
 }
 void NGSParameters::set_induce_seq_parameters_path(std::string* paramValue){
     induce_seq_parameters_path = *paramValue;
+}
+void NGSParameters::set_remove_strands_with_SSBs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_remove_strands_with_SSBs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_remove_strands_with_SSBs()<<"\" -----\n";
+    }
 }
 void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
@@ -403,7 +457,8 @@ void NGSParameters::set_custom_read_quality_profiles(){
                  <<" The read quality file cannot be found at "<<path_to_custom_r1_quality_profile<<"\n";
         exit(EXIT_FAILURE);
     }
-    if(!r2_quality_profile.empty() && !checkFileExists(&r2_quality_profile)){
+    std::string empty_path = "\"\"";                                                            // Unset path parameters are stored as this literal 2-character sentinel, not a true empty string
+    if(r2_quality_profile != empty_path && !checkFileExists(&r2_quality_profile)){
         std::cerr<<"\n ERROR: Invalid file path or Missing files\n"
                  <<" The read quality file cannot be found at "<<path_to_custom_r2_quality_profile<<"\n";
         exit(EXIT_FAILURE);
@@ -617,6 +672,9 @@ bool NGSParameters::get_generate_reads(){
 bool NGSParameters::get_output_sequenced_dsbs(){
     return(is_output_sequenced_dsbs);
 }
+bool NGSParameters::get_output_dsbs(){
+    return(is_output_dsbs);
+}
 const std::string* NGSParameters::get_induce_seq_genome_fasta_path(){
     return(&induce_seq_genome_fasta_path);
 }
@@ -628,6 +686,9 @@ double NGSParameters::get_probability_of_sequencing_multiplier(){
 }
 const std::string* NGSParameters::get_induce_seq_parameters_path(){
     return(&induce_seq_parameters_path);
+}
+bool NGSParameters::get_remove_strands_with_SSBs(){
+    return(is_remove_strands_with_SSBs);
 }
 const std::string* NGSParameters::get_sequencer(){
     return(&sequencer);
@@ -880,6 +941,11 @@ void NGSParameters::help_parameter(std::string* paramName){
         <<"to specify whether or not you wish to generate reads in induce_seq. \n"
         <<" If False, the genome FASTA is not built/loaded and no read output file is created; all other induce_seq output files are still created. \n";
     }
+    else if (*paramName == "remove_strands_with_SSBs"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not DSB fragments (denatured DNA strands) with a single-strand break on them should be removed in induce_seq, \n"
+        <<" as such strands would not be sequenced. \n";
+    }
 }
 //--------------------------------------------------------------------------------------------
 
@@ -944,13 +1010,28 @@ void NGSParameters::success_parameter(){
         }
     }
 
+    // For induce_seq, a previously-built induce_seq genome fasta (induce_seq_genome_fasta_path) can be used instead of the
+    // reference genome, avoiding the need to rebuild it every run. If one is specified and exists, use that and skip
+    // requiring the reference genome file altogether; otherwise, fall back to checking the reference genome as usual.
+    bool induceSeq_genome_available = false;
+    if (get_induce_seq()){
+        const std::string* induceSeqGenomePath = get_induce_seq_genome_fasta_path();
+        std::string empty_path = "\"\"";                                                       // Empty string parameter values are stored literally as "" (unstripped quotes)
+        if (*induceSeqGenomePath != empty_path && checkFileExists(induceSeqGenomePath)){
+            std::cout<<"\n Successfully read the induce_seq genome fasta file : "<< *induceSeqGenomePath<<'\n';
+            induceSeq_genome_available = true;
+        }
+    }
+
     // If the reference genome is user specified, then the filename should be valid. Else, exit with error
-    if (!checkFileExists(get_reference_genome())){
-        std::cerr<<"\n ERROR: Unable to read the reference genome file provided : "<< *get_reference_genome()<<'\n';
-        temp_str= "reference_genome_FASTAfile"; help_parameter(&temp_str);
-        exit(EXIT_FAILURE);
-    }else{
-        std::cout<<"\n Successfully read the reference genome file : "<< *get_reference_genome()<<'\n';
+    if (!induceSeq_genome_available){
+        if (!checkFileExists(get_reference_genome())){
+            std::cerr<<"\n ERROR: Unable to read the reference genome file provided : "<< *get_reference_genome()<<'\n';
+            temp_str= "reference_genome_FASTAfile"; help_parameter(&temp_str);
+            exit(EXIT_FAILURE);
+        }else{
+            std::cout<<"\n Successfully read the reference genome file : "<< *get_reference_genome()<<'\n';
+        }
     }
     
     // Check if the user provided value for the maximum errors in a read is more than the read length or if it is less than -1 (default value)

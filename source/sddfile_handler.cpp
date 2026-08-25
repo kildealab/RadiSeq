@@ -89,8 +89,7 @@ void NGSsdd::set_chrom_size_bp(std::string* sddField){
             temp_vec[i+2].erase(temp_vec[i+2].size() - 1);                                              // Remove the ';' character
         }
         // chrom_size_bp.push_back(std::stold(temp_vec[i+2])*1e6);                                         // Convert chrom size from Mbp to bp before storing
-        chrom_size_bp.push_back(std::lroundl(std::stold(temp_vec[i+2])*1e6));  
-        std::cout << chrom_size_bp.back() << "\n";
+        chrom_size_bp.push_back(std::lroundl(std::stold(temp_vec[i+2])*1e6));
     }
 }
 void NGSsdd::set_cell_ploidy_and_chrom_mappping(std::string* sddField){

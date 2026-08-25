@@ -1112,6 +1112,119 @@ void generate_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
 
 
 
+//------------------------------------------------------------------------------------------------------------------------
+// A function to generate a summary report at the end of an INDUCE-seq run. It will create a file called "Run_summary_report.txt"
+// in the output directory. This mirrors generate_run_summaryReport, but leaves out fields that don't apply to INDUCE-seq
+// (e.g. GC bias/content, DNA fragment size distribution shape, read 2 information, expected-coverage-based read counts),
+// and includes fields specific to INDUCE-seq (the fragment size distribution and size filtering probability files used,
+// and the actual number of reads generated).
+//------------------------------------------------------------------------------------------------------------------------
+void generate_induceSeq_run_summaryReport(NGSParameters& parameter, NGSsdd& SDDdata){
+    std::string report_filename = *parameter.get_output_directory()+"/Run_summary_report.txt";
+    std::ofstream report_file(report_filename.c_str());
+    std::time_t currentTime = std::time(nullptr);                                                         // Get the current system time
+    std::string timeString = std::ctime(&currentTime);                                                    // Convert the current time to a string representation
+    report_file<<"------------------------------------------------------------------------------------------------------------\n"
+               <<"                                   RADISEQ SIMULATOR RUN SUMMARY REPORT             \n"
+               <<"------------------------------------------------------------------------------------------------------------\n"
+               <<" This report was prepared on "<<timeString<<"\n\n"
+               <<" Time duration of this run                                            : "<<(report_cpu_time_used)<<" min\n";
+    if(parameter.get_random_seed() == 0){
+        report_file<<" The seed used for this run                                           : Random seed\n";
+    }else{
+        report_file<<" The random seed used for this run                                    : "<<parameter.get_random_seed()<<"\n";
+    }
+    if(parameter.get_number_of_threads() == 1){
+        report_file<<" Multi-threading option                                               : Disabled\n";
+    }else{
+        report_file<<" Multi-threading option                                               : Enabled\n"
+                   <<" Number of threads used for the run                                   : "<<parameter.get_number_of_threads()<<"\n";
+    }
+    report_file<<" The parameter file specified                                         : "<<report_parameterFileName<<"\n\n"
+               <<" ------ SDD file information -------\n"
+               <<" Number of cells irradiated in the Monte Carlo Simulation             : "<<SDDdata.get_num_of_exposures()<<"\n";
+
+    if(parameter.get_merge_damages_from_particles()){
+        report_file<<" Number of SDD files given to merge damages from                      : "<<parameter.get_num_of_particles_to_merge()<<"\n"
+                   <<" The names of these SDD files are                                     : ";
+        for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
+            if(i!=0) report_file<<", ";
+            report_file<<parameter.get_sddfile_path()[i];
+        }
+        report_file<<"\n These SDD files are generated with the primary particles             : ";
+        for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
+            if(i!=0) report_file<<", ";
+            if(i>static_cast<int>(parameter.get_names_of_particles_to_merge()->size())-1) report_file<<"Unspecified";
+            else{
+                const std::vector<std::string>* particle_names = parameter.get_names_of_particles_to_merge();
+                report_file<<(*particle_names)[i];
+            }
+        }
+        report_file<<"\n The dose contributions of these particles                            : ";
+        double totalDose{0};
+        for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
+            if(i!=0) report_file<<", ";
+            report_file<<SDDdata.get_expected_dose_gy(i)<<" Gy";
+            totalDose+=SDDdata.get_expected_dose_gy(i);
+        }
+        report_file<<" (Total of "<<totalDose<<" Gy)\n";
+    }else{
+        report_file<<" Name of the SDD file provided                                        : "<<parameter.get_sddfile_path()[0]<<"\n";
+        const std::vector<std::string>* particle_names = parameter.get_names_of_particles_to_merge();
+        report_file<<" Name of the primary particle used for the irradiation                : "<<(*particle_names)[0];
+        report_file<<"\n The dose delivered to a single cell during the irradiation           : "<<SDDdata.get_expected_dose_gy(0)<<" Gy\n";
+    }
+    if(parameter.get_adjust_damages_with_actual_dose()){
+        report_file<<" Are the radiation-induced damages adjusted for actual delivered dose : Yes \n"
+                   <<" Number of damages are adjusted for delivered dose using the files    : ";
+        for(int i=0;i<parameter.get_num_of_particles_to_merge();i++){
+            if(i!=0) report_file<<", ";
+            const std::vector<std::string>* actual_dose_files = parameter.get_actual_dosefile_path();
+            report_file<<(*actual_dose_files)[i];
+        }
+        report_file<<"\n";
+    }else report_file<<" Are the radiation-induced damages adjusted for actual delivered dose : No \n";
+
+    report_file<<" The genome length of the Monte Carlo cell model                      : "<<SDDdata.get_sdd_genome_length()<<" bp\n"
+               <<" Name of the reference genome file used                               : "<<report_reference_genome_used<<"\n"
+               <<" The length of the reference genome                                   : "<<report_ref_seq_length<<" bp\n\n"
+               <<" ------ Sequencing information -------\n"
+               <<" Name of the Illumina sequencer used for NGS simulation               : "<<*parameter.get_sequencer()<<"\n";
+    if(*parameter.get_sequencer() == "Custom"){
+        report_file<<" Name of the read 1 quality profile file                              : "<<*parameter.get_custom_r1_quality_profile_path()<<"\n";
+    }
+    report_file<<" The sequencing protocol used                                         : INDUCE-seq\n";
+
+    report_file<<" Name of the fragment size distribution file used                     : "<<*parameter.get_dsb_end_fragment_size_distribution_path()<<"\n"
+               <<" Name of the size filtering probability file used                     : "<<*parameter.get_induce_seq_probability_of_sequencing_path()<<"\n";
+
+    report_file<<" Total number of cells in the sample                                  : "<<parameter.get_num_of_cells_in_sample()<<"\n"
+               <<" Length of the reads simulated                                        : "<<parameter.get_read_length()<<" bp\n";
+
+    long reads_actually_generated = std::accumulate(report_readsGenerated_perCell.begin(),report_readsGenerated_perCell.end(),0L);
+    long num_cells_sequenced = static_cast<long>(report_cells_sequenced.size());
+    report_file<<" The number of reads generated                                        : "<<reads_actually_generated<<"\n"
+               <<" The average number of reads generated per cell                       : "<<(num_cells_sequenced>0 ? reads_actually_generated/num_cells_sequenced : 0)<<"\n";
+
+    report_file<<" The error-rate used for adding insertions in the read                : "<<parameter.get_insertion_error_rate_read1()<<"\n"
+               <<" The error-rate used for deletions in the read                        : "<<parameter.get_deletion_error_rate_read1()<<"\n";
+
+    report_file<<" The directory where the sequenced FASTQ files are stored             : "<<*parameter.get_output_directory()<<"\n\n"
+               <<" ------ Output data information -------\n\n"
+               <<"------------------------------------------------------------------------------------------------------------\n"
+               <<"|    Name of the cell sequenced                   |    Output FASTQ filename                               |\n"
+               <<"------------------------------------------------------------------------------------------------------------\n";
+    for(size_t i=0; i<report_cells_sequenced.size(); i++){
+        report_file<<std::left<<std::setw(50)<<"|    "+report_cells_sequenced[i]<<"|    "
+                   <<std::left<<std::setw(52)<<report_fastq_output[i]+"_R1.fastq.gz"<<"|\n"
+                   <<"|                                                                                                          |\n";
+    }
+    report_file<<"------------------------------------------------------------------------------------------------------------\n";
+}
+//------------------------------------------------------------------------------------------------------------------------
+
+
+
 //------------------------------------------------------------------------------------------------------
 // A function to determine the size of a file that is passed. Return value in bytes
 //------------------------------------------------------------------------------------------------------

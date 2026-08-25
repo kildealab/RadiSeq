@@ -17,18 +17,20 @@ OBJ_DIR = objects
 # -std=c++1z or c++17 C++ language standard should be C++17 or above in clang or gcc respectively
 # -fopenmp Use openmp library for parallelization
 # -I$(INC_DIR) Include files from INC_DIR when compiling
+# -MMD -MP: emit a .d file per .o listing its header dependencies (pulled in below via -include),
+# 	so editing a header rebuilds every .o that includes it, not just the .cpp that changed.
+# 	Without this, mismatched .o files can silently link together with different header layouts.
+# -fno-strict-aliasing: needed for this codebase's raw pointer aliasing over mmap'd buffers;
+# 	without it, -O3 has been observed to miscompile InduceSeq's genome-processing path.
 
 # Determine the C++17 standard flag based on the compiler
-# -fno-strict-aliasing: this codebase does a lot of raw pointer manipulation over
-# memory-mapped files (mmap'd char* buffers reinterpreted/walked as different logical
-# records), which isn't strict-aliasing-safe. Under -O3 this reliably miscompiled
-# InduceSeq's genome-processing path (corrupting unrelated heap memory well after the
-# fact); confirmed via bisection across -O0/-O1/-O2/-O3 and fixed by this flag alone.
+
 COMPILER := $(shell $(CPP) -dM -E - < /dev/null | grep __clang__)
+
 ifneq ($(COMPILER),)
-    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++1z -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++1z -fopenmp -MMD -MP -I$(INC_DIR)
 else
-    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++17 -fopenmp -I$(INC_DIR)
+    CXXFLAGS = -c -Wall -O3 -fno-strict-aliasing -g -std=c++17 -fopenmp -MMD -MP -I$(INC_DIR)
 endif
 
 LDFLAGS = -fopenmp -lz
@@ -70,6 +72,11 @@ $(EXECUTABLE2): $(OBJ2)
 $(OBJ_DIR)/radiSeqProfiler.o: $(SRC2)
 	$(CPP) $(CXXFLAGS) $< -o $@
 
+# Pull in the auto-generated header dependency rules (see the -MMD -MP note above), so editing
+# a header correctly triggers a rebuild of every .o that (transitively) includes it. Silently
+# does nothing on a clean checkout / after `make clean`, before any .d files exist yet.
+-include $(OBJS:.o=.d) $(OBJ2:.o=.d)
+
 # Remove all the object files and the executable
 clean:
-	rm -rf $(OBJ_DIR)/*.o $(EXECUTABLE) $(EXECUTABLE2)   
+	rm -rf $(OBJ_DIR)/*.o $(OBJ_DIR)/*.d $(EXECUTABLE) $(EXECUTABLE2)

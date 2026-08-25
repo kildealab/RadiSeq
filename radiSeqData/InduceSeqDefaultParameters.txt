@@ -13,7 +13,12 @@ probability_of_sequencing_path              = default                 # Path to 
 probability_of_sequencing_multiplier        = 0.2                     # Flat probability (independent of anything else) that a DSB fragment is sequenced. 
                                                                       # One can obtain equivalent results by setting this parameter to 1, and then randomly removing reads after the simulation.
 
-output_sequenced_dsbs                       = True                    # "True" if user wishes to output a csv file listing the DSBs fragments that were sequenced
+output_dsbs                                 = False                   # "True" if user wishes to output a csv file listing the DSB blunted ends in each cell
+
+output_sequenced_dsbs                       = False                   # "True" if user wishes to output a csv file listing the DSBs fragments that were sequenced
+
+remove_strands_with_SSBs                    = True                    # "True" if DSB fragments (denatured DNA strands) with a single-strand break on them should be removed. Because SSBs are repaired much quicker than DSBs, 
+                                                                      # this parameter can be set to "False" to simulate SSBs having been repaired before sequencing. 
 
 generate_reads                              = True                    # "True" if user wishes to generate reads as output. If False, the genome FASTA is not
                                                                       # built/loaded and no read output file is created, to save on computing time. 

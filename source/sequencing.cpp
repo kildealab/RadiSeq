@@ -201,7 +201,6 @@ void single_cell_sequencing(NGSParameters& parameter, const std::vector<std::str
                     #pragma omp flush(end_flag)                                                         // Make sure the end_flag variable gets the latest updated value and not get cached
                     local_end_flag = end_flag;                                                          // Update the local flag so that all the threads get the updated value
                     long num_reads_per_segment = static_cast<long>((coverage_per_cell*chromSegSeq.size())/parameter.get_read_length());
-                    // std::cout << num_reads_per_segment << "\n";
 
                     if(num_reads_per_segment>=1 && (static_cast<int>(chromSegSeq.size())>parameter.get_read_length())){   // Proceed only if at least one read is needed from chromSegmentSeq and segment is bigger than the read length, otherwise continue with the next segment
                         #pragma omp master                                                              // This section needs to be done by only one thread

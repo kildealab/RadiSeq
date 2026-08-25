@@ -1,6 +1,6 @@
 # RadiSeq
 
-This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. RadiSeq can perform both bulk- and single-cell whole genome DNA sequencing.<br>
+This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed cells using a Standard DNA Damage (SDD) data file from Monte Carlo simulations of cell irradiations. RadiSeq can perform both bulk- and single-cell whole genome DNA sequencing. It can also simulate the double-strand break detection method INDUCE-seq, developed by Dobbs et al [1]. <br>
 <br>
 [![DOI](https://zenodo.org/badge/666482390.svg)](https://zenodo.org/doi/10.5281/zenodo.13371311)
 
@@ -14,6 +14,7 @@ This is a tool to simulate Next Generation Sequencing (NGS) of radiation-exposed
 * [Input Parameters](#input-parameters)
 * [Use cases](#use-cases)
 * [Acknowledgements](#acknowledgements)
+* [References](#references)
 
 ## Authors
 
@@ -24,7 +25,7 @@ Contact email: felix.mathew@mail.mcgill.ca
 Website: [www.kildealab.com](https://kildealab.com/software/radiseq_simulator/)
 
 ## Description
-Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. <br>
+Use RadiSeq to computationally simulate whole genome DNA sequencing of radiation-exposed cells in a sample. The complete working logic is shown in the flowchart below. The INDUCE-seq simulation is largely separate from this logic, and is described elsewhere. <br>
 
 ![Logo](./figures/radiSeq%20Simulator.svg)
 
@@ -89,7 +90,7 @@ The user should specify all the input parameters for the simulation in a paramet
 of their choosing, as long as the contents of the file are formatted in a specified parameter name and value pair. Input values can be given in the format:
 `Parameter Name = Parameter Value   #comment`. The list of all acceptable parameter names is given in the table below. All the parameters are optional except the path to the SDD file. 
 
-| Parameter name | Description | Parameter value |
+| Parameter name | Description | Parameter value | 
 |----------|------------|------------|
 | sddFilePath | Complete path to the SDD file(s) | Comma separated list of paths (string) |
 | merge_damages_from_multiple_particles | Flag to indicate if the user wishes to define a single genome by combining damages from multiple SDD files | 'True' or 'False' |
@@ -165,6 +166,10 @@ To learn more about the ART toolkit:
 * Publication: Weichun Huang and others, ART: a next-generation sequencing read simulator, Bioinformatics, Volume 28, Issue 4, February 2012, Pages 593–594, https://doi.org/10.1093/bioinformatics/btr708
 * ART toolkit: https://www.niehs.nih.gov/research/resources/software/biostatistics/art/index.cfm
 * GitHub: https://github.com/scchess/Art/tree/master
+
+## References
+
+[1] F. M. Dobbs, P. van Eijk, M. D. Fellows, L. Loiacono, R. Nitsch, and S. H. Reed, "Precision digital mapping of endogenous and induced genomic DNA breaks by INDUCE-seq," *Nature Communications*, vol. 13, Art. no. 3989, Jul. 2022, doi: 10.1038/s41467-022-31702-9.
 
 
 

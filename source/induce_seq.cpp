@@ -3,6 +3,7 @@
 #include "fastafile_handler.h"
 #include "fileio.h"
 #include "random_generator.h"
+#include "summary_report.h"
 
 #include <fstream>
 #include <iostream>
@@ -28,9 +29,12 @@ InduceSeq::InduceSeq(NGSsdd& sddData, NGSParameters parameters, std::string temp
         // r2_quality_profile is not used in InduceSeq, it is needed as an argument for the function
         ART::set_read_quality_distribution(*parameter.get_r1_quality_profile(), *parameter.get_r2_quality_profile());
     } else {
-        // If reads are generated, then chrom_end_loc are determined from the reference genome. 
+        // If reads are generated, then chrom_end_loc are determined from the reference genome.
         // In this case, they must be read from the SDD file
         chrom_end_loc = *sddData.get_chrom_end_loc();
+        // No genome FASTA is loaded in this mode (set_genome_data is never called above), so there is no reference genome file to report
+        report_reference_genome_used = "Not applicable (read generation is disabled)";
+        report_ref_seq_length = chrom_end_loc.back();
     }
 }
 
@@ -81,12 +85,6 @@ void InduceSeq::init_set_data_holders(int nGroupThreads){
     dsb_fragments_right.clear();
     dsb_fragments_right.resize(nGroupThreads);
 
-    dsb_strands_left.clear();
-    dsb_strands_left.resize(nGroupThreads);
-
-    dsb_strands_right.clear();
-    dsb_strands_right.resize(nGroupThreads);
-
     base_pair_damages_left.clear();
     base_pair_damages_left.resize(nGroupThreads);
 
@@ -100,8 +98,6 @@ void InduceSeq::reset_permanent_damage_vecs(int groupTID){                      
     dsb_blunted_ends[groupTID].clear();
     dsb_fragments_left[groupTID].clear();
     dsb_fragments_right[groupTID].clear();
-    dsb_strands_left[groupTID].clear();
-    dsb_strands_right[groupTID].clear();
     base_pair_damages_left[groupTID].clear();
     base_pair_damages_right[groupTID].clear();
 }
@@ -114,13 +110,17 @@ void InduceSeq::reset_permanent_damage_vecs(int groupTID){                      
 //These IDs will be unique across across all concurrent calls of run_simulations, and can be used to access thread-specific data without causing thread-races. 
 void InduceSeq::run_simulation(int cell_number, int groupTID, int NumWorkerThreads, int threadIDOffset) {
     find_DSBs(parameter.get_dsb_threshold(), groupTID);
-    save_dsb_locations(cell_number, groupTID);
+    // save_dsb_locations(cell_number, groupTID);
     load_blunted_ends(groupTID);
-    save_dsb_blunted_ends(cell_number, groupTID);
+    if (parameter.get_output_dsbs()) {
+        save_dsb_blunted_ends(cell_number, groupTID);
+    }
     //threadIDOffset is used as the threadID for these 2 single-threaded functions, since this will be the global ID of the master (0th) thread in the thread group
     load_dsb_fragments(groupTID, threadIDOffset); 
     filter_dsb_fragments(groupTID, threadIDOffset);
-    filter_dsb_strands_ssd(groupTID);
+    if (parameter.get_remove_strands_with_SSBs()) {
+        filter_dsb_strands_ssd(groupTID);
+    }
     find_base_pair_damages(groupTID);
     generate_simulation_output(cell_number, groupTID, NumWorkerThreads, threadIDOffset);
 }
@@ -141,19 +141,29 @@ void InduceSeq::set_genome_data(std::string& tempFolderPath) {
 
     if (pathIsSet && checkFileExists(&savedGenomeFastaPath)) {
         genome_fasta = generateInputFileMemoryMap(savedGenomeFastaPath, genome_fasta_size);                    // Load the previously saved genome fasta memory-map instead of rebuilding it
+        report_reference_genome_used = savedGenomeFastaPath;                                                   // An INDUCE-seq formatted genome already existed, so report that as the genome file used
     } else {
         long ref_genomeFile_size = fileSize_bytes(*parameter.get_reference_genome());
         std::string genomeTemplatePath = pathIsSet ? savedGenomeFastaPath : tempFolderPath+"/genome_spaceless.fa";
-        genome_fasta_size = static_cast<size_t>(ref_genomeFile_size*2);                                        // The size of an Undamaged file is estimated to be 2 times the size of the reference sequence file
+        genome_fasta_size = static_cast<size_t>(ref_genomeFile_size*2 + 1000);                                        // The size of an Undamaged file is estimated to be 2 times the size of the reference sequence file, plus potentiall 1000 for chromosome headers 
+        std::cout<<"\n Building an induce_seq-formatted reference genome. "<<std::endl;
+        if (!pathIsSet) {                                                                                      // Only when building to the temp folder (which is deleted at the end of the run), rather than a persistent, user-specified path
+            std::cout<<" This process can be avoided in future runs by saving the formatted genome using the induce_seq_genome_fasta_path parameter"<<std::endl;
+        }
         genome_fasta = createMemoryMappedFile(genomeTemplatePath, genome_fasta_size);                          // Generate a memory-map placeholder to store the memory map of the undamaged fasta file as it gets created later
         buildUndamagedGenomeTemplate_ForwardOnly_MM(genome_fasta, genome_fasta_size, sdd_data.get_num_chrom(), sdd_data.get_chrom_mapping(), parameter.get_reference_genome(), cum_chrom_header_sizes);
+        report_reference_genome_used = *parameter.get_reference_genome();                                      // A new INDUCE-seq formatted genome was constructed from the unformatted reference genome, so report that instead
+        if (pathIsSet) {                                                                                       // Only when saved to a persistent, user-specified path rather than the temp folder
+            std::cout<<"\n Saved the induce_seq-formatted reference genome FASTA file to: "<<savedGenomeFastaPath<<" for reuse in future runs"<<std::endl;
+        }
     }
 
     calculateChromEndLoc(cum_chrom_header_sizes, chrom_headers, chrom_end_loc, genome_fasta, genome_fasta_size);
+    report_ref_seq_length = chrom_end_loc.back();                                                              // Length of the reference genome, for the summary report
     
     // Make sure the difference between the reference genome length and the MC model length is within the required limit
     long ref_seq_length = chrom_end_loc.back();
-    double percent_diff_seq_length = ((std::abs(sdd_data.get_sdd_genome_length()-ref_seq_length))/ref_seq_length)*100;
+    double percent_diff_seq_length = (std::abs(sdd_data.get_sdd_genome_length()-ref_seq_length)/static_cast<double>(ref_seq_length))*100;
                                                                // For all scenarios other than the test run,
     if(percent_diff_seq_length>parameter.get_max_acceptable_seq_length_difference()){                      // If the reference seq length and the monte carlo model seq length are different more than the value specified
         std::cerr<<"\n ERROR: The reference sequence length ("<<ref_seq_length<<" bp) and "
@@ -252,13 +262,17 @@ void InduceSeq::save_dsb_locations(int cell_number, int groupTID) {
 }
 
 // Saves every element of dsb_blunted_ends[groupTID] to a csv file, one row per blunted end (see
-// load_blunted_ends for how these fields are populated, and for the field format).
+// load_blunted_ends for how these fields are populated, and for the field format). The
+// left_edge/right_edge locations are also reported relative to their chromosome's start (chrom_end_loc[chrom_idx]
+// is the cumulative length of all preceding chromosomes, so subtracting it converts a genome-wide location
+// to a 1-based location within the chromosome; see load_dsb_fragments for the same conversion).
 void InduceSeq::save_dsb_blunted_ends(int cell_number, int groupTID) {
     std::string filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_dsb_blunted_ends.csv";
     std::ofstream blunted_ends_file(filename.c_str());
-    blunted_ends_file << "left_edge_location,right_edge_location,chromosome_index,left_dsb_strand1_location,left_dsb_strand2_location,right_dsb_strand1_location,right_dsb_strand2_location\n";
+    blunted_ends_file << "left edge location,right edge location,left edge location relative to chromosome start,right edge location relative to chromosome start,chromosome index (starting at 0 in the order listed in SDD file)\n";
     for (const std::vector<long>& blunted_end : dsb_blunted_ends[groupTID]) {
-        blunted_ends_file << blunted_end[0] << "," << blunted_end[1] << "," << blunted_end[2] << "," << blunted_end[3] << "," << blunted_end[4] << "," << blunted_end[5] << "," << blunted_end[6] << "\n";
+        long chrom_start = chrom_end_loc[blunted_end[2]];
+        blunted_ends_file << blunted_end[0] << "," << blunted_end[1] << "," << (blunted_end[0] - chrom_start) << "," << (blunted_end[1] - chrom_start) << "," << blunted_end[2] << "\n";
     }
     blunted_ends_file.close();
 }
@@ -448,85 +462,72 @@ void InduceSeq::filter_dsb_fragments(int groupTID, int threadID) {
     );
 }
 
-// Populates the dsb_strands_left and right arrays to contain denatured DNA strands.
-// dsb_strands are stored as vectors in the same format as dsb_fragments (see load_dsb_fragments): {location of the
-// fragment's end at the DSB-caused blunted end, location of the fragment's other end, chromosome index,
-// strand1 (backbone1) location of the dsb that caused this blunted end, strand2 (backbone2) location of the
-// dsb that caused this blunted end}. Each entry is copied through unchanged from the corresponding dsb_fragment.
-// It filters strands based on whether a single strand break is present on the strand, which would cause the strand to not be sequenced
+// Filters dsb_fragments_left/right[groupTID] in place, removing fragments based on whether a single strand break is
+// present on the fragment, which would cause the fragment (a denatured DNA strand) to not be sequenced. Surviving
+// entries are left unchanged, in the same per-entry format as before filtering (see load_dsb_fragments).
 void InduceSeq::filter_dsb_strands_ssd(int groupTID) {
-    dsb_strands_left[groupTID].clear();
-    dsb_strands_right[groupTID].clear();
+    std::vector<std::vector<long>>& left_fragments = dsb_fragments_left[groupTID];
+    std::vector<std::vector<long>>& right_fragments = dsb_fragments_right[groupTID];
     std::vector<long> strand_1_breaks = sdd_data.get_backbone1_break_loc(groupTID);
     std::vector<long> strand_2_breaks = sdd_data.get_backbone2_break_loc(groupTID);
 
-    size_t i = 0;
     size_t ssd_i = 0;
-    while (i < dsb_fragments_left[groupTID].size()) {
-        std::vector<long> dsb_frag = dsb_fragments_left[groupTID][i];
-        long frag_end = dsb_frag[1];
-        long causing_break = dsb_frag[3];                                          // backbone1 break that formed this dsb
+    left_fragments.erase(
+        std::remove_if(left_fragments.begin(), left_fragments.end(), [&](const std::vector<long>& dsb_frag) {
+            long frag_end = dsb_frag[1];
+            long causing_break = dsb_frag[3];                                      // backbone1 break that formed this dsb
 
-        bool is_good = true;
+            bool is_good = true;
 
-        // checks for ssbs 
-        // Because of overhang fill-in during blunting, the edge of a fragment can be at a different location than the original dsb edge. 
-        // damages with positions in between these two positions would not be on the fragment, since that part of the fragment is remade. 
-        // That is why causing_break is used as a bound, instead of the end of the break.  
-        
-        while (ssd_i < strand_1_breaks.size() && strand_1_breaks[ssd_i] < causing_break) {
-            if (strand_1_breaks[ssd_i] >= frag_end) {
-                is_good = false;
+            // checks for ssbs
+            // Because of overhang fill-in during blunting, the edge of a fragment can be at a different location than the original dsb edge.
+            // damages with positions in between these two positions would not be on the fragment, since that part of the fragment is remade.
+            // That is why causing_break is used as a bound, instead of the end of the break.
+            while (ssd_i < strand_1_breaks.size() && strand_1_breaks[ssd_i] < causing_break) {
+                if (strand_1_breaks[ssd_i] >= frag_end) {
+                    is_good = false;
+                }
+                ssd_i++;
             }
-            ssd_i++;
-        }
 
-        if (is_good) {
-            dsb_strands_left[groupTID].push_back(dsb_frag);
-        }
+            return !is_good;
+        }),
+        left_fragments.end()
+    );
 
-        
-        i++;
-    }
-
-    i = 0;
     ssd_i = 0;
-    while (i < dsb_fragments_right[groupTID].size()) {
-        std::vector<long> dsb_frag = dsb_fragments_right[groupTID][i];
-        long frag_start = dsb_frag[0];
-        long frag_end = dsb_frag[1];
-        long causing_break = dsb_frag[4];                                          // strand2 location of the dsb that caused the right edge
+    right_fragments.erase(
+        std::remove_if(right_fragments.begin(), right_fragments.end(), [&](const std::vector<long>& dsb_frag) {
+            long frag_start = dsb_frag[0];
+            long frag_end = dsb_frag[1];
+            long causing_break = dsb_frag[4];                                      // strand2 location of the dsb that caused the right edge
 
-        bool is_good = true;
+            bool is_good = true;
 
-        // Because of overhang fill-in during blunting, the edge of a fragment can be at a different location than the original dsb edge. 
-        // damages with positions in between these two positions would not be on the fragment, since that part of the fragment is remade. This loop filters them out. 
-        while (ssd_i < strand_2_breaks.size() && strand_2_breaks[ssd_i] <= causing_break) {
-            ssd_i++;
-        }
-        // Breaks strictly after the causing break are genuinely 
-        while (ssd_i < strand_2_breaks.size() && strand_2_breaks[ssd_i] < frag_end) {
-            if (strand_2_breaks[ssd_i] >= frag_start) {
-               is_good = false;
+            // Because of overhang fill-in during blunting, the edge of a fragment can be at a different location than the original dsb edge.
+            // damages with positions in between these two positions would not be on the fragment, since that part of the fragment is remade. This loop filters them out.
+            while (ssd_i < strand_2_breaks.size() && strand_2_breaks[ssd_i] <= causing_break) {
+                ssd_i++;
             }
-            ssd_i++;
-        }
+            // Breaks strictly after the causing break are genuinely
+            while (ssd_i < strand_2_breaks.size() && strand_2_breaks[ssd_i] < frag_end) {
+                if (strand_2_breaks[ssd_i] >= frag_start) {
+                   is_good = false;
+                }
+                ssd_i++;
+            }
 
-        if (is_good) {
-            dsb_strands_right[groupTID].push_back(dsb_frag);
-        }
-        
-        i++;
-
-    }
-
+            return !is_good;
+        }),
+        right_fragments.end()
+    );
 }
 
 
-// Populates base_pair_damages_left/right[groupTID], one entry per surviving fragment in dsb_strands_left/right[groupTID]
-// (same index, in the same order), with the list of base-pair damage locations that are on that fragment, on the strand that 
+// Populates base_pair_damages_left/right[groupTID], one entry per surviving fragment in dsb_fragments_left/right[groupTID]
+// (same index, in the same order), with the list of base-pair damage locations that are on that fragment, on the strand that
 // produces an INDUCEseq read: basestrand1 for left fragments, basestrand2 for right fragments. The list can be empty for a fragment if
-// the fragment contains no damage. Assumes dsb_strands_left/right[groupTID] and the basestrand1/2 damage location
+// the fragment contains no damage. Assumes dsb_fragments_left/right[groupTID] and the basestrand1/2 damage location
 // vectors are all sorted ascending: bp_i is advanced monotonically across all fragments of a side (not reset per
 // fragment), so this runs in a single linear pass over each damage-location vector rather than re-scanning it per fragment.
 void InduceSeq::find_base_pair_damages(int groupTID) {
@@ -535,7 +536,7 @@ void InduceSeq::find_base_pair_damages(int groupTID) {
 
     size_t bp_i = 0;
     std::vector<long> bp_damages = sdd_data.get_basestrand1_damage_loc(groupTID);
-    for (std::vector<long> dsb_strand : dsb_strands_left[groupTID]) {
+    for (std::vector<long> dsb_strand : dsb_fragments_left[groupTID]) {
         std::vector<long> bp_damages_in_strand;
         while (bp_i < bp_damages.size() && bp_damages[bp_i] <= dsb_strand[0]) {
             if (bp_damages[bp_i] >= dsb_strand[1]) {
@@ -548,7 +549,7 @@ void InduceSeq::find_base_pair_damages(int groupTID) {
 
     bp_i = 0;
     bp_damages = sdd_data.get_basestrand2_damage_loc(groupTID);
-    for (std::vector<long> dsb_strand : dsb_strands_right[groupTID]) {
+    for (std::vector<long> dsb_strand : dsb_fragments_right[groupTID]) {
         std::vector<long> bp_damages_in_strand;
         while (bp_i < bp_damages.size() && bp_damages[bp_i] <= dsb_strand[1]) {
             if (bp_damages[bp_i] >= dsb_strand[0]) {
@@ -590,7 +591,7 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
     if (parameter.get_output_sequenced_dsbs()) {
         output_sequenced_dsbs_filename = (*parameter.get_output_directory())+"/"+(*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number)+"_sequenced_dsbs.csv";
         sequenced_dsbs_file.open(output_sequenced_dsbs_filename.c_str());
-        sequenced_dsbs_file << "fragment_start,fragment_end,chromosome_index,is_left,strand1_damage_location,strand2_damage_location,read_number\n";
+        sequenced_dsbs_file << "fragment start location,fragment end location,fragment start location relative to chromosome start,fragment end location relative to chromosome start,chromosome index (starting at 0 in order of chromosome sizes listed in sdd file),is forward read,read number\n";
     }
 
     ART read1;                                                                                      // Creating an ART class object and setting the insertion and deletion probability vectors for that read object
@@ -613,24 +614,25 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
     std::vector<std::vector<std::string>> dsb_batch_buffer(num_available_threads);                   // Per-thread buffer for the sequenced-DSBs CSV lines, flushed the same way as batch_buffer
 
     #pragma omp parallel for num_threads(num_available_threads)
-    for (size_t i=0; i<dsb_strands_left[groupTID].size() + dsb_strands_right[groupTID].size(); i++) {
+    for (size_t i=0; i<dsb_fragments_left[groupTID].size() + dsb_fragments_right[groupTID].size(); i++) {
         int localTID = omp_get_thread_num();                                                       // ID local to this call's team (0..num_available_threads-1); safe to index batch_buffer, which is private to this call
         int threadID = threadIDOffset + localTID;                                                  // Globally-unique ID (0..nThreads_User-1) required by rng::local_mt and ART's per-thread buffers, which are shared across all concurrently-running groups
         std::vector<long> dsb_strand;
         std::vector<long> bp_damages;
         bool is_left;
-        if (i < dsb_strands_left[groupTID].size()) {
-            dsb_strand = dsb_strands_left[groupTID][i];
+        if (i < dsb_fragments_left[groupTID].size()) {
+            dsb_strand = dsb_fragments_left[groupTID][i];
             bp_damages = base_pair_damages_left[groupTID][i];
             is_left = true;
         } else {
-            dsb_strand = dsb_strands_right[groupTID][i - dsb_strands_left[groupTID].size()];
-            bp_damages = base_pair_damages_right[groupTID][i - dsb_strands_left[groupTID].size()];
+            dsb_strand = dsb_fragments_right[groupTID][i - dsb_fragments_left[groupTID].size()];
+            bp_damages = base_pair_damages_right[groupTID][i - dsb_fragments_left[groupTID].size()];
             is_left = false;
         }
 
         if (parameter.get_output_sequenced_dsbs()) {
-            std::string dsb_data = std::to_string(dsb_strand[0])+","+std::to_string(dsb_strand[1])+","+std::to_string(dsb_strand[2])+","+std::to_string(is_left)+","+std::to_string(dsb_strand[3])+","+std::to_string(dsb_strand[4])+","+std::to_string(i)+"\n";
+            long chrom_start = chrom_end_loc[dsb_strand[2]];
+            std::string dsb_data = std::to_string(dsb_strand[0])+","+std::to_string(dsb_strand[1])+","+std::to_string(dsb_strand[0]-chrom_start)+","+std::to_string(dsb_strand[1]-chrom_start)+","+std::to_string(dsb_strand[2])+","+std::to_string(!is_left)+","+std::to_string(i)+"\n";
             dsb_batch_buffer[localTID].push_back(dsb_data);                         // Add the DSB data to the buffer vector of the respective thread
 
             if (dsb_batch_buffer[localTID].size() >= static_cast<size_t>(batchSize_thread)) {// Check if the batch buffer is full, and write it to the file if needed.
@@ -683,6 +685,16 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
             writeBatchToFile(batch_buffer[l], fastq_R1_file, parameter.get_compress_output());      // If there are unwritten data in batch buffer, write that too when the loop ends
         }
         fastq_R1_file.close();
+
+        // Record this cell's data for the summary report. generate_simulation_output can run concurrently for different
+        // cells (each handled by a different thread group), so the shared report_* vectors are guarded with a critical section.
+        long reads_generated_this_cell = static_cast<long>(dsb_fragments_left[groupTID].size() + dsb_fragments_right[groupTID].size());
+        #pragma omp critical(summary_report_data)
+        {
+            report_cells_sequenced.push_back("Damaged_cell_"+std::to_string(cell_number));
+            report_fastq_output.push_back((*parameter.get_output_fastq_filename_prefix())+"_"+std::to_string(cell_number));
+            report_readsGenerated_perCell.push_back(static_cast<int>(reads_generated_this_cell));
+        }
     }
     if (parameter.get_output_sequenced_dsbs()) {
         for (size_t l=0;l<dsb_batch_buffer.size();l++){
@@ -693,7 +705,7 @@ void InduceSeq::generate_simulation_output(int cell_number, int groupTID, int nu
 }
 
 // Sets dna_seq to be the DNA sequence of a dsb_strand, in the order that it will generate a read. bp_damages is an array specifying the 
-// locations of damages on the strand; these bases are replaced by N. is_left specifies whether the strand came from dsb_strands_left (generates a backward read) or dsb_strands_right (forward read)
+// locations of damages on the strand; these bases are replaced by N. is_left specifies whether the strand came from dsb_fragments_left (generates a backward read) or dsb_fragments_right (forward read)
 void InduceSeq::get_dna_sequence(std::string& dna_seq, std::vector<long>& bp_damages, std::vector<long>& dsb_strand, bool is_left) {
     int chrom_idx = dsb_strand[2];
     long start_char_i = dsb_strand[0] + cum_chrom_header_sizes[chrom_idx] - 1;

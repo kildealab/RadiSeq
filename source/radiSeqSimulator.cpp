@@ -123,7 +123,9 @@ int main(int argc, char* argv[]){
     omp_set_num_threads(nThreads_User);                                                                             // Set the number of threads available for OMP as the number user requested
     
     if(0<SDDdata.get_num_of_damagedCells_toBuild()){                                                                // Attempt building damaged cells only if we need to build atleast one damaged cell
-        std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- "<<std::endl;  
+        if (!parameters.get_induce_seq()) {
+            std::cout<<"\n ----- Building damaged genomes of the irradiated cells ----- "<<std::endl;  
+        }
         int threadGroups{nThreads_User};                                                                            // Variable to hold the number of thread groups we want to create
         int threadPerGroup{1};                                                                                      // Variable to hold the number of equal threads per each group
         int xtraThreads{0};
@@ -170,7 +172,8 @@ int main(int argc, char* argv[]){
                     }
                 }
                 if (parameters.get_induce_seq()) {
-                    induceSeq->run_simulation(i, groupTID, workerThreads, threadIDOffset);
+                    std::cout<<"\n Simulation of cell "<<i+1<<" is in progress \n"; 
+                    induceSeq->run_simulation(i+1, groupTID, workerThreads, threadIDOffset);
                 } else {
                     //SDDdata.find_DNA_breakPoints(parameters.get_dsb_threshold());
                     //-------------- Stage 3: Generating damaged cell genomes -----------------//
@@ -189,7 +192,12 @@ int main(int argc, char* argv[]){
                 }
             }
         }
-        std::cout<<"\n Building of all the damaged cell genomes is now complete "<<std::endl;
+        if (parameters.get_induce_seq()) {
+            std::cout<<"\n INDUCE-seq simulation is complete. You can find the sequenced FASTQ files in the output folder: "<<output_directory<<std::endl;
+        } else{
+            std::cout<<"\n Building of all the damaged cell genomes is now complete "<<std::endl;
+        }
+        
     }else{
         std::cerr<<"\n WARNING: The SDD files provided have invalid (empty) damage data.\n Data from these files will be ignored\n"; 
     }
@@ -232,19 +240,23 @@ int main(int argc, char* argv[]){
             bulk_cell_sequencing(parameters, cellGenomes_to_be_sequenced, line_weights_in_cell_to_seq, ref_seq_length);
             std::cout<<"\n Bulk-cell sequencing of cells are now complete. You can find the sequenced FASTQ files in the output folder: \""<<output_directory<<"\"\n\n";
         }
-        
-        auto end_time = std::chrono::high_resolution_clock::now();                                                  // Get the ending time of the run (for run time calculation)                                                                                          // Finding the end time of the run
-        
-        // Make     (!parameters.get_induce_seq()) { the summary report of the run if specified
-        if (parameters.get_summary_report()){
-            std::chrono::duration<double> duration = end_time - start_time;
-            report_cpu_time_used = std::chrono::duration_cast<std::chrono::minutes>(duration).count();              // Convert the duration to minutes
-            report_parameterFileName = user_parameter_file;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();                                                  // Get the ending time of the run (for run time calculation)                                                                                          // Finding the end time of the run
+    
+    // Make the summary report of the run if specified
+    if (parameters.get_summary_report()){
+        std::chrono::duration<double> duration = end_time - start_time;
+        report_cpu_time_used = std::chrono::duration_cast<std::chrono::minutes>(duration).count();              // Convert the duration to minutes
+        report_parameterFileName = user_parameter_file;
+        if (parameters.get_induce_seq()) {
+            generate_induceSeq_run_summaryReport(parameters, SDDdata);
+        } else {
             report_ref_seq_length = ref_seq_length;
             report_GC_content = average_GC_content;
             generate_run_summaryReport(parameters, SDDdata);
         }
-    }    
+    }
     // Remove the temporary directory (temp) that stores the fasta file once processing is done
-    // remove_directory(tempFolderPath); 
+    remove_directory(tempFolderPath); 
 }
