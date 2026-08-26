@@ -1,0 +1,42 @@
+#------------- DO NOT MODIFY THIS FILE  -------------#
+
+
+DSB_threshold_in_bp                         = 10                      # Maximum distance in bp between two opposite strand break to be considered as part of a
+                                                                      # double-strand break (DSB). 
+
+dsb_end_fragment_size_distribution_path     = default                 # Path to the file containing the size distribution of DNA fragments from DSB ends (including the ligated P5 adapters).
+                                                                      # Default path is hard-coded (FragmentSizeDist_induceSeq.txt). 
+                                                                      # This default distribution is taken from the graph on pg. 73 of Dobbs' PhD thesis (https://orca.cardiff.ac.uk/id/eprint/143377/2/Felix_Dobbs_PhD_Thesis_2021.pdf)
+
+probability_of_sequencing_path              = default                 # Path to the file containing the probability of sequencing (retaining) a fragment, indexed by fragment length, not including P5 and P7 adapters.
+                                                                      # Default path is hard-coded (induce_seq_probability_of_sequencing.csv). Sizes above those explicitly listed in the file are taken to have the same probability as that of the largest listed fragment size. 
+
+probability_of_sequencing_multiplier        = 0.2                     # Flat probability (independent of anything else) that a DSB fragment is sequenced. 
+                                                                      # One can obtain equivalent results by setting this parameter to 1, and then randomly removing reads after the simulation.
+
+output_dsbs                                 = False                   # "True" if user wishes to output a csv file listing the DSB blunted ends in each cell
+
+output_sequenced_dsbs                       = False                   # "True" if user wishes to output a csv file listing the DSBs fragments that were sequenced
+
+remove_strands_with_SSBs                    = True                    # "True" if DSB fragments (denatured DNA strands) with a single-strand break on them should be removed. Because SSBs are repaired much quicker than DSBs, 
+                                                                      # this parameter can be set to "False" to simulate SSBs having been repaired before sequencing. 
+
+generate_reads                              = True                    # "True" if user wishes to generate reads as output. If False, the genome FASTA is not
+                                                                      # built/loaded and no read output file is created, to save on computing time. 
+                                                                      # All other output files (DSB locations, sequenced DSBs, per-cell simulation data) are still created.
+
+P5_adapter_length                           = 58                      # Length of the P5 adapter/primer (in bp), used in generating fragments
+
+P7_adapter_sequence                         = AGATCGGAAGAGCACACGTCTGAACTCCAGTCACIIIIIIATCTCGTATGCCGTCTTCTGCTTG
+                                                                      # P7 adapter sequence appended to a read to simulate adapter read-through.
+                                                                      # 'I' characters are index placeholders replaced with random bases at read-generation time.
+
+maximum_overlap_fragment_generation         = 0.3                     # Maximum fraction of the length of a DNA segment between two DSB edges from neibouring DBSs that generated fragments are allowed to overlap by.
+                                                                      # If 2 generated fragments overlap by more than this, it is taken that the DNA segment is not broken during fragmentation, and neither DSB end produces a read. 
+                                                                      # In the case of an allowable overlap, the DNA segment is broken in the midpoint of the overlap. 
+                                                                      # This value should be a double in the range [0,1]
+
+induce_seq_genome_fasta_path                = ""                      # Optional path to save/load an undamaged genome FASTA file built in a specific format from the reference genome.
+                                                                      # If empty, the fasta file is built and deleted each run, which takes a while for large genomes, so it is recommeded to set a path. 
+                                                                      # If set and the file does not exist, it is built and saved to this path for reuse in future runs.
+                                                                      # WARNING: Do not run concurrent INDUCE-seq programs before this file is created, as multiple programs will attempt to write to the file. 

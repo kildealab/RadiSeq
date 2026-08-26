@@ -2,6 +2,7 @@
 #define SDDFILE_HANDLER_H
 
 #include "parameter_handler.h"
+#include<map>
 
 class NGSsdd{
     int num_of_SDDs;                                                                 // Variable to hold the number of SDD files/ particles to merge
@@ -26,7 +27,7 @@ class NGSsdd{
     std::vector<long> chrom_end_loc{0};                                              // Vector stores the location of the ends of each chromosome in genome (in unit of bp). First element is zero. 
     int num_chroms;                                                                  // Variable sets the number of chromosomes in the cell model
     int chrom_mapping_type{0};                                                       // 0 if haploid, 1 if chrom mapping is 1,1,2,2......22,22,X,Y; 2 if chrom mapping is 1,2,......22,1,2,......22,X,Y
-    //std::vector<long> DNA_breakPoints;                                               // Vector to hold all the DSB locations of each cell at a time
+    //std::vector<long> DNA_breakPoints;                                             // Vector to hold all the DSB locations of each cell at a time
 
 
 public:

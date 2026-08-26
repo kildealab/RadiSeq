@@ -503,4 +503,10 @@ double GCBias::get_GCbias(double GC_content){                                   
     }
     return std::max(bias, 0.0);                                                                         // Ensure bias is non-negative
 }
+
+long get_position_in_file(long chrom_position, int chrom_number, std::vector<int> cum_chrom_header_sizes) {
+    return chrom_position + cum_chrom_header_sizes[chrom_number];
+}
+
+
 //------------------------------------------------------------------------------------------------------

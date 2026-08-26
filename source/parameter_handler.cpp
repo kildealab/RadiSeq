@@ -9,12 +9,18 @@
 
 // Default constructor
 NGSParameters::NGSParameters(){
+    dsb_threshold = 10;
+    maximum_overlap_fragment_generation = 0.4;
+    probability_of_sequencing_multiplier = 0.94;
     default_parameter_file_name = "/NGSDefaultParameters.txt";
+    induce_seq_default_parameter_file_name = "/InduceSeqDefaultParameters.txt";
     reference_genome_file_name = "/Human_reference_genome.fa";
-    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","Test","Custom"};
-    list_read_lengths = {100, 100, 125, 150, 150, 151, 5};
-    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","test_R1.txt"};
-    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","test_R2.txt"};
+    dsb_end_fragment_size_distribution_file_name = "/FragmentSizeDist_induceSeq.txt";
+    induce_seq_probability_of_sequencing_file_name = "/induce_seq_probability_of_sequencing.csv";
+    list_sequencers = {"HiSeq1000","HiSeq2000","HiSeq2500_v125","HiSeq2500_v150","HiSeqX","NovaSeq6000","NextSeq500_v75","Test","Custom"};
+    list_read_lengths = {100, 100, 125, 150, 150, 151, 75, 5};
+    list_r1_quality_profiles = {"HiSeq1000_R1.txt","HiSeq2000_R1.txt","HiSeq2500_v125_R1.txt","HiSeq2500_v150_R1.txt","HiSeqX_R1.txt","NovaSeq6000_R1.txt","NextSeq500v2L75R1.txt","test_R1.txt"};
+    list_r2_quality_profiles = {"HiSeq1000_R2.txt","HiSeq2000_R2.txt","HiSeq2500_v125_R2.txt","HiSeq2500_v150_R2.txt","HiSeqX_R2.txt","NovaSeq6000_R2.txt","NextSeq500v2L75R2.txt","test_R2.txt"};
 }
 
 
@@ -32,17 +38,48 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
     }
     
     dataFolderPath = *dataPath;
+    while(!dataFolderPath.empty() && dataFolderPath.back() == '/'){                                    // Strip any trailing slash(es) from RADISEQ_DATA_DIR, since the data filenames below already start with '/'
+        dataFolderPath.pop_back();
+    }
     if(!checkFolderExists(dataFolderPath.c_str())){                // Check if the environment variable set by the user is pointing to the right directory
         std::cerr<<"\n ERROR: Unable to find the environment variable \"RADISEQ_DATA_DIR\" path correctly. The path provided is "<<dataFolderPath<<"\n";
         exit(EXIT_FAILURE);
     }
     // Defining data filenames w.r.t the variable dataFolderPath
     default_parameter_file = dataFolderPath+default_parameter_file_name;
+    induce_seq_default_parameter_file = dataFolderPath+induce_seq_default_parameter_file_name;
     reference_genome_file = dataFolderPath+reference_genome_file_name;
+    dsb_end_fragment_size_distribution_path = dataFolderPath+dsb_end_fragment_size_distribution_file_name;
+    induce_seq_probability_of_sequencing_path = dataFolderPath+induce_seq_probability_of_sequencing_file_name;
 
     // Continue if parameter file is present and set all parameter values
     readParameterFile(&default_parameter_file, parameter);         // Read default parameter file first to set default parameter values
+    current_param_source = ParamSource::MAIN_USER;                 // Track every parameter name the user sets here, so an induce_seq parameter set in this file isn't silently lost below
     readParameterFile(parameterfile, parameter);                   // Read user-specified parameter file to overwrite default parameter values
+    current_param_source = ParamSource::NONE;
+
+    // If induce_seq is requested, read the induce_seq specific parameters. The default file is always read
+    // first so every induce_seq-specific parameter has a value; if the user also specified induce_seq_parameters_path,
+    // that file is read afterwards as an overlay, so only the parameters it actually mentions get overridden and
+    // everything else keeps its value from InduceSeqDefaultParameters.txt. Any induce_seq parameter that the user
+    // already set in the main parameter file is left untouched by this default pass (see set_parameters), and is
+    // only overridden again with a warning if the induce_seq parameter file below also sets it.
+    if(get_induce_seq()){
+        std::string empty_path = "\"\"";                                              // Empty string parameter values are stored literally as "" (unstripped quotes)
+        current_param_source = ParamSource::INDUCE_SEQ_DEFAULT;
+        readParameterFile(&induce_seq_default_parameter_file, parameter);
+        current_param_source = ParamSource::NONE;
+        if(!(induce_seq_parameters_path.empty() || induce_seq_parameters_path == empty_path)){ // If a custom path was specified, apply it on top of the defaults
+            if(!checkFileExists(&induce_seq_parameters_path)){                        // If the specified file cannot be found, exit gracefully
+                std::cerr<<"\n ERROR: Unable to read the induce_seq parameter file : "<< induce_seq_parameters_path<<'\n';
+                exit(EXIT_FAILURE);
+            }
+            std::cout<<"\n Successfully read the induce_seq parameter file: "<< induce_seq_parameters_path<<'\n';
+            current_param_source = ParamSource::INDUCE_SEQ_USER;
+            readParameterFile(&induce_seq_parameters_path, parameter);
+            current_param_source = ParamSource::NONE;
+        }
+    }
 
     success_parameter();                                           // Check if provided parameters meet all conditions and if it is appropriate
 
@@ -62,6 +99,24 @@ void NGSParameters::process_parameterFile(const std::string* parameterfile, NGSP
 // on the parameterName passed
 //--------------------------------------------------------------------------------------------
 void NGSParameters::set_parameters(std::string* paramName, std::string* paramValue){
+    switch(current_param_source){
+        case ParamSource::MAIN_USER:
+            main_file_param_names.insert(*paramName);                                // Remember this name so the induce_seq default/user files below can detect a conflict with it
+            break;
+        case ParamSource::INDUCE_SEQ_DEFAULT:
+            if(main_file_param_names.count(*paramName) > 0){                         // Already explicitly set in the main parameter file
+                return;                                                              // Keep that value instead of overwriting it with the induce_seq default
+            }
+            break;
+        case ParamSource::INDUCE_SEQ_USER:
+            if(main_file_param_names.count(*paramName) > 0){                         // Also explicitly set in the main parameter file
+                std::cerr<<"\n WARNING: Parameter \""<<*paramName<<"\" is set in both the main parameter file and the induce_seq parameter file. "
+                <<"Using the value from the induce_seq parameter file: \""<<*paramValue<<"\"\n";
+            }
+            break;
+        case ParamSource::NONE:
+            break;
+    }
     if (*paramName == "random_seed"){
         set_random_seed(paramValue);
     }
@@ -95,9 +150,9 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "output_directory_path"){
         set_output_directory(paramValue);
     }
-    //else if (*paramName == "DSB_threshold_in_bp"){
-    //    set_dsb_threshold(paramValue);
-    //}
+    else if (*paramName == "DSB_threshold_in_bp"){
+        set_dsb_threshold(paramValue);
+    }
     else if (*paramName == "illumina_sequencer"){
         set_sequencer(paramValue);
     }
@@ -182,6 +237,45 @@ void NGSParameters::set_parameters(std::string* paramName, std::string* paramVal
     else if (*paramName == "compress_output"){
         set_compress_output(paramName, paramValue);
     }
+    else if (*paramName == "induce_seq"){
+        set_induce_seq(paramName, paramValue);
+    }
+    else if (*paramName == "P5_adapter_length"){
+        set_P5_adapter_length(paramValue);
+    }
+    else if (*paramName == "P7_adapter_sequence"){
+        set_P7_adapter_sequence(paramValue);
+    }
+    else if (*paramName == "maximum_overlap_fragment_generation"){
+        set_maximum_overlap_fragment_generation(paramName, paramValue);
+    }
+    else if (*paramName == "dsb_end_fragment_size_distribution_path"){
+        set_dsb_end_fragment_size_distribution_path(paramName, paramValue);
+    }
+    else if (*paramName == "output_sequenced_dsbs"){
+        set_output_sequenced_dsbs(paramName, paramValue);
+    }
+    else if (*paramName == "output_dsbs"){
+        set_output_dsbs(paramName, paramValue);
+    }
+    else if (*paramName == "induce_seq_genome_fasta_path"){
+        set_induce_seq_genome_fasta_path(paramValue);
+    }
+    else if (*paramName == "induce_seq_probability_of_sequencing_path" || *paramName == "probability_of_sequencing_path"){
+        set_induce_seq_probability_of_sequencing_path(paramName, paramValue);
+    }
+    else if (*paramName == "probability_of_sequencing_multiplier"){
+        set_probability_of_sequencing_multiplier(paramName, paramValue);
+    }
+    else if (*paramName == "generate_reads"){
+        set_generate_reads(paramName, paramValue);
+    }
+    else if (*paramName == "induce_seq_parameters_path"){
+        set_induce_seq_parameters_path(paramValue);
+    }
+    else if (*paramName == "remove_strands_with_SSBs"){
+        set_remove_strands_with_SSBs(paramName, paramValue);
+    }
     else{
         std::cerr<<"\n WARNING: Unrecognized parameter specified : \""<<*paramName<<"\"\n"
         <<" ----- This parameter will be ignored -----\n";
@@ -249,9 +343,83 @@ void NGSParameters::set_max_acceptable_seq_length_difference(std::string* paramV
 void NGSParameters::set_output_directory(std::string* paramValue){
     output_directory = *paramValue;
 }
-//void NGSParameters::set_dsb_threshold(std::string* paramValue){
-//    dsb_threshold = std::stoi(*paramValue);
-//}
+void NGSParameters::set_dsb_threshold(std::string* paramValue){
+    dsb_threshold = std::stoi(*paramValue);
+}
+void NGSParameters::set_P5_adapter_length(std::string* paramValue){
+    P5_adapter_length = std::stoi(*paramValue);
+}
+void NGSParameters::set_P7_adapter_sequence(std::string* paramValue){
+    P7_adapter_sequence = *paramValue;
+}
+void NGSParameters::set_maximum_overlap_fragment_generation(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        maximum_overlap_fragment_generation = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.4\" -----\n";
+    }
+}
+void NGSParameters::set_dsb_end_fragment_size_distribution_path(std::string* paramName, std::string* paramValue){
+    if(*paramValue == "default"){                                                       // If reading default parameter file, keep the hard-coded default path computed in process_parameterFile
+        return;
+    }else{
+        dsb_end_fragment_size_distribution_path = *paramValue;
+    }
+}
+void NGSParameters::set_induce_seq_genome_fasta_path(std::string* paramValue){
+    induce_seq_genome_fasta_path = *paramValue;
+}
+void NGSParameters::set_induce_seq_probability_of_sequencing_path(std::string* paramName, std::string* paramValue){
+    if(*paramValue == "default"){                                                       // If reading default parameter file, keep the hard-coded default path computed in process_parameterFile
+        return;
+    }else{
+        induce_seq_probability_of_sequencing_path = *paramValue;
+    }
+}
+void NGSParameters::set_probability_of_sequencing_multiplier(std::string* paramName, std::string* paramValue){
+    if(std::stod(*paramValue) >= 0.0 && std::stod(*paramValue) <= 1.0){
+        probability_of_sequencing_multiplier = std::stod(*paramValue);
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \"0.94\" -----\n";
+    }
+}
+void NGSParameters::set_output_sequenced_dsbs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_output_sequenced_dsbs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_sequenced_dsbs()<<"\" -----\n";
+    }
+}
+void NGSParameters::set_output_dsbs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_output_dsbs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_output_dsbs()<<"\" -----\n";
+    }
+}
+void NGSParameters::set_generate_reads(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_generate_reads = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_generate_reads()<<"\" -----\n";
+    }
+}
+void NGSParameters::set_induce_seq_parameters_path(std::string* paramValue){
+    induce_seq_parameters_path = *paramValue;
+}
+void NGSParameters::set_remove_strands_with_SSBs(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_remove_strands_with_SSBs = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_remove_strands_with_SSBs()<<"\" -----\n";
+    }
+}
 void NGSParameters::set_sequencer(std::string* paramValue){
     sequencer = *paramValue;
 }
@@ -289,7 +457,8 @@ void NGSParameters::set_custom_read_quality_profiles(){
                  <<" The read quality file cannot be found at "<<path_to_custom_r1_quality_profile<<"\n";
         exit(EXIT_FAILURE);
     }
-    if(!r2_quality_profile.empty() && !checkFileExists(&r2_quality_profile)){
+    std::string empty_path = "\"\"";                                                            // Unset path parameters are stored as this literal 2-character sentinel, not a true empty string
+    if(r2_quality_profile != empty_path && !checkFileExists(&r2_quality_profile)){
         std::cerr<<"\n ERROR: Invalid file path or Missing files\n"
                  <<" The read quality file cannot be found at "<<path_to_custom_r2_quality_profile<<"\n";
         exit(EXIT_FAILURE);
@@ -434,6 +603,14 @@ void NGSParameters::set_compress_output(std::string* paramName, std::string* par
         std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_compress_output()<<"\" -----\n";
     }
 }
+void NGSParameters::set_induce_seq(std::string* paramName, std::string* paramValue){
+    if(lowercaseString(paramValue) == "true"||lowercaseString(paramValue) == "false"){
+        is_induce_seq = (lowercaseString(paramValue) == "true");
+    }else{
+        help_parameter(paramName);
+        std::cerr<<" ----- Setting \""<<*paramName<<"\" to its default value: \""<<std::boolalpha<<get_induce_seq()<<"\" -----\n";
+    }
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -474,9 +651,45 @@ double NGSParameters::get_max_acceptable_seq_length_difference(){
 const std::string* NGSParameters::get_output_directory(){
     return(&output_directory);
 }
-//int NGSParameters::get_dsb_threshold(){
-//    return(dsb_threshold);
-//}
+int NGSParameters::get_dsb_threshold(){
+    return(dsb_threshold);
+}
+int NGSParameters::get_P5_adapter_length(){
+    return(P5_adapter_length);
+}
+const std::string* NGSParameters::get_P7_adapter_sequence(){
+    return(&P7_adapter_sequence);
+}
+double NGSParameters::get_maximum_overlap_fragment_generation(){
+    return(maximum_overlap_fragment_generation);
+}
+const std::string* NGSParameters::get_dsb_end_fragment_size_distribution_path(){
+    return(&dsb_end_fragment_size_distribution_path);
+}
+bool NGSParameters::get_generate_reads(){
+    return(is_generate_reads);
+}
+bool NGSParameters::get_output_sequenced_dsbs(){
+    return(is_output_sequenced_dsbs);
+}
+bool NGSParameters::get_output_dsbs(){
+    return(is_output_dsbs);
+}
+const std::string* NGSParameters::get_induce_seq_genome_fasta_path(){
+    return(&induce_seq_genome_fasta_path);
+}
+const std::string* NGSParameters::get_induce_seq_probability_of_sequencing_path(){
+    return(&induce_seq_probability_of_sequencing_path);
+}
+double NGSParameters::get_probability_of_sequencing_multiplier(){
+    return(probability_of_sequencing_multiplier);
+}
+const std::string* NGSParameters::get_induce_seq_parameters_path(){
+    return(&induce_seq_parameters_path);
+}
+bool NGSParameters::get_remove_strands_with_SSBs(){
+    return(is_remove_strands_with_SSBs);
+}
 const std::string* NGSParameters::get_sequencer(){
     return(&sequencer);
 }
@@ -573,6 +786,9 @@ bool NGSParameters::get_summary_report(){
 bool NGSParameters::get_compress_output(){
     return(is_compress_output);
 }
+bool NGSParameters::get_induce_seq(){
+    return(is_induce_seq);
+}
 //--------------------------------------------------------------------------------------------
 
 
@@ -613,6 +829,10 @@ void NGSParameters::help_parameter(std::string* paramName){
         std::cerr<<" Specify the path to the FASTA file with the reference genome. \n"
         <<" Specified reference genome must be in a valid FASTA file ending with '.fa' extension. \n"
         <<" If not specified, the default Ashkenazi human reference genome will be used\n";
+    }
+    else if (*paramName == "DSB_threshold_in_bp"){
+        std::cerr<<" Specify the maximum distance (in bp) between two opposite-strand breaks for them to be considered as part of the same double-strand break (DSB). \n"
+        <<" This value should be a non-negative integer \n";
     }
     else if (*paramName == "illumina_sequencer"){
         std::cerr<<" Specify the name of the Illumina sequencer to be used for sequencing. \n"
@@ -704,6 +924,28 @@ void NGSParameters::help_parameter(std::string* paramName){
         std::cerr<<" This parameter should be set \"True\" or \"False\" "
         <<"to specify whether or not you wish to compress the output FASTQ files (gzip) \n";
     }
+    else if (*paramName == "induce_seq"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not you wish to induce sequencing errors/artifacts \n";
+    }
+    else if (*paramName == "maximum_overlap_fragment_generation"){
+        std::cerr<<" Specify the maximum fraction of the gap between two neighbouring DSBs that their generated fragments are allowed to overlap by. \n"
+        <<" This value should be a double in the range [0,1]\n";
+    }
+    else if (*paramName == "probability_of_sequencing_multiplier"){
+        std::cerr<<" Specify the flat probability (independent of fragment size) that a DSB fragment survives sequencing in induce_seq. \n"
+        <<" This value should be a double in the range [0,1]\n";
+    }
+    else if (*paramName == "generate_reads"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not you wish to generate reads in induce_seq. \n"
+        <<" If False, the genome FASTA is not built/loaded and no read output file is created; all other induce_seq output files are still created. \n";
+    }
+    else if (*paramName == "remove_strands_with_SSBs"){
+        std::cerr<<" This parameter should be set \"True\" or \"False\" "
+        <<"to specify whether or not DSB fragments (denatured DNA strands) with a single-strand break on them should be removed in induce_seq, \n"
+        <<" as such strands would not be sequenced. \n";
+    }
 }
 //--------------------------------------------------------------------------------------------
 
@@ -768,13 +1010,28 @@ void NGSParameters::success_parameter(){
         }
     }
 
+    // For induce_seq, a previously-built induce_seq genome fasta (induce_seq_genome_fasta_path) can be used instead of the
+    // reference genome, avoiding the need to rebuild it every run. If one is specified and exists, use that and skip
+    // requiring the reference genome file altogether; otherwise, fall back to checking the reference genome as usual.
+    bool induceSeq_genome_available = false;
+    if (get_induce_seq()){
+        const std::string* induceSeqGenomePath = get_induce_seq_genome_fasta_path();
+        std::string empty_path = "\"\"";                                                       // Empty string parameter values are stored literally as "" (unstripped quotes)
+        if (*induceSeqGenomePath != empty_path && checkFileExists(induceSeqGenomePath)){
+            std::cout<<"\n Successfully read the induce_seq genome fasta file : "<< *induceSeqGenomePath<<'\n';
+            induceSeq_genome_available = true;
+        }
+    }
+
     // If the reference genome is user specified, then the filename should be valid. Else, exit with error
-    if (!checkFileExists(get_reference_genome())){
-        std::cerr<<"\n ERROR: Unable to read the reference genome file provided : "<< *get_reference_genome()<<'\n';
-        temp_str= "reference_genome_FASTAfile"; help_parameter(&temp_str);
-        exit(EXIT_FAILURE);
-    }else{
-        std::cout<<"\n Successfully read the reference genome file : "<< *get_reference_genome()<<'\n';
+    if (!induceSeq_genome_available){
+        if (!checkFileExists(get_reference_genome())){
+            std::cerr<<"\n ERROR: Unable to read the reference genome file provided : "<< *get_reference_genome()<<'\n';
+            temp_str= "reference_genome_FASTAfile"; help_parameter(&temp_str);
+            exit(EXIT_FAILURE);
+        }else{
+            std::cout<<"\n Successfully read the reference genome file : "<< *get_reference_genome()<<'\n';
+        }
     }
     
     // Check if the user provided value for the maximum errors in a read is more than the read length or if it is less than -1 (default value)

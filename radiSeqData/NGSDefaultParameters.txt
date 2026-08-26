@@ -29,11 +29,8 @@ acceptable_difference_in_seq_length_percent = 10                      # Specify 
 
 output_directory_path                       = ./output                # Path to the directory where the output fastq files should be stored
 
-#DSB_threshold_in_bp                         = 10                      # Maximum distance between two opposite strand break to be considered as part of a 
-                                                                      # double-strand break (DSB). Specify the distance in bp
-
 illumina_sequencer                          = HiSeqX                  # Name of the Illumina sequencer to be used for sequencing. Only the following names
-                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX and NovaSeq6000
+                                                                      # can be used: HiSeq1000, HiSeq2000, HiSeq2500_v125, HiSeq2500_v150, HiSeqX, NovaSeq6000 and NextSeq500_v75
 
 custom_read1_quality_profile_path           = ""                      # Must specify the path to the quality profile file for read 1 if custom sequencer is chosen
 
@@ -96,3 +93,10 @@ output_FASTQ_filename_prefix                = CELL                    # Prefix f
 make_summary_report                         = True                    # "True" if user wishes to generate a summary report file at the end of run
 
 compress_output                             = True                    # "True" if the user wishes to compress the output FASTQ files (gzip)
+
+induce_seq                                  = False                   # "True" if the user wishes to simulate the INDUCE-seq DSB detection method instead of regular sequencing.
+                                                                      # In this case, induce_seq_parameters_path should be specified, unless the user wishes to use default parameters.
+
+induce_seq_parameters_path                  = ""                      # Path to a file containing parameters specific to INDUCE-seq. These parameters can also be listed in the main parameter file. 
+
+                                                                      
