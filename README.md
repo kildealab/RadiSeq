@@ -132,11 +132,11 @@ of their choosing, as long as the contents of the file are formatted in a specif
 | induce_seq | Flag to indicate whether the user wishes to run a simulation of the INDUCE-seq method instead of whole genome sequencing. False by default. | 'True' or 'False' | Yes |
 | induce_seq_parameters_path | Path to a file containing parameters specific to INDUCE-seq. | path to file (string) | Yes | 
 
-The parameters listed below are specific to the INDUCE-seq simulation. They can be set in a separate file specified in induce_seq_parameters_path, or alternatively in the main parameter file. 
+The parameters listed below are specific to the INDUCE-seq simulation. They can be set in a separate file specified in induce_seq_parameters_path, or in the main parameter file. 
 
 | INDUCE-seq Parameter name | Description | Parameter value |
 |----------|------------|------------|
-| DSB_threshold_in_bp | Maximum distance in bp between two opposite strand breaks to be considered as part of a double-strand break (DSB) | Number (non-negative integer) |
+| DSB_threshold_in_bp | Maximum distance in bp between two opposite strand breaks for them to be considered a double-strand break (DSB) | Number (non-negative integer) |
 | dsb_end_fragment_size_distribution_path | Path to the file containing the size distribution of DNA fragments from DSB ends. | path to file (string) |
 | probability_of_sequencing_path | Path to the file containing the probability of retaining a fragment through size filtering, indexed by fragment length, not including P5 and P7 adapters. | path to file (string) |
 | probability_of_sequencing_multiplier | Flat probability (independent of anything else) that a DSB fragment is sequenced. By default 0.2. | Number in the range [0,1] (double) |
@@ -147,7 +147,7 @@ The parameters listed below are specific to the INDUCE-seq simulation. They can 
 | P5_adapter_length | Length of the P5 adapter/primer (in bp), used in generating fragments | Number (integer) |
 | P7_adapter_sequence | P7 adapter sequence used to simulate adapter read-through. | String |
 | maximum_overlap_fragment_generation | Maximum fraction of the length of a DNA segment between two DSB edges from neighbouring DSBs that generated fragments are allowed to overlap by for a break to still be generated, during the simulation of fragmentation. If 2 generated fragments overlap by more than this, it is taken that the DNA segment is not broken during fragmentation, and neither DSB end produces a read. In the case of an allowable overlap, the DNA segment is broken at the midpoint of the overlap | Number in the range [0,1] (double) |
-| induce_seq_genome_fasta_path | Optional path to save/load an undamaged genome FASTA file built in a specific format from the reference genome. If empty, the fasta file is built and deleted each run, which takes some time for large genomes, so it is recommended to set a path. If set and the file does not exist, it is built and saved to this path for reuse in future runs. **Warning**: Do not run concurrent INDUCE-seq programs before this file is created, as multiple programs will attempt to write to the file | Path to file (string) |
+| induce_seq_genome_fasta_path | Optional path to save/load an undamaged genome FASTA file built in a specific format from the reference genome. If empty, the fasta file is built and deleted each run, which takes some time for large genomes, so it is recommended to set a path. If set and the file does not exist, it is built and saved to this path for reuse in future runs. **Warning**: Do not run concurrent INDUCE-seq simulations before this file is created, as multiple programs will attempt to write to the file | Path to file (string) |
 
 
 ## Use cases
