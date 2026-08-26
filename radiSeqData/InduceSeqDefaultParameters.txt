@@ -4,7 +4,7 @@
 DSB_threshold_in_bp                         = 10                      # Maximum distance in bp between two opposite strand break to be considered as part of a
                                                                       # double-strand break (DSB). 
 
-dsb_end_fragment_size_distribution_path     = default                 # Path to the file containing the size distribution of DNA fragments from DSB ends.
+dsb_end_fragment_size_distribution_path     = default                 # Path to the file containing the size distribution of DNA fragments from DSB ends (including the ligated P5 adapters).
                                                                       # Default path is hard-coded (FragmentSizeDist_induceSeq.txt). 
                                                                       # This default distribution is taken from the graph on pg. 73 of Dobbs' PhD thesis (https://orca.cardiff.ac.uk/id/eprint/143377/2/Felix_Dobbs_PhD_Thesis_2021.pdf)
 

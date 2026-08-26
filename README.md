@@ -139,7 +139,7 @@ The parameters listed below are specific to the INDUCE-seq simulation. They can 
 | DSB_threshold_in_bp | Maximum distance in bp between two opposite strand breaks to be considered as part of a double-strand break (DSB) | Number (non-negative integer) |
 | dsb_end_fragment_size_distribution_path | Path to the file containing the size distribution of DNA fragments from DSB ends. | path to file (string) |
 | probability_of_sequencing_path | Path to the file containing the probability of retaining a fragment through size filtering, indexed by fragment length, not including P5 and P7 adapters. | path to file (string) |
-| probability_of_sequencing_multiplier | Flat probability (independent of anything else) that a DSB fragment is sequenced. | Number in the range [0,1] (double) |
+| probability_of_sequencing_multiplier | Flat probability (independent of anything else) that a DSB fragment is sequenced. By default 0.2. | Number in the range [0,1] (double) |
 | output_dsbs | Flag to indicate if the user wishes to output a csv file listing the DSB blunted ends in each cell | 'True' or 'False' |
 | output_sequenced_dsbs | Flag to indicate if the user wishes to output a csv file listing the DSB fragments that were sequenced | 'True' or 'False' |
 | remove_strands_with_SSBs | Flag to indicate if DSB fragments (denatured DNA strands) with a single-strand break on them should be removed. | 'True' or 'False' |
@@ -180,17 +180,17 @@ A unimodal distribution is desirable for GC bias in sequencing. i.e, both genomi
 
 Simulated INDUCE-seq reads are generated through the following steps:
 
-1. **DSB finding:** From an SDD exposure, the locations of DNA damages are read. The locations of DSBs are found, which are taken to be 2 or more single strand breaks within `DSB_threshold_in_bp` bp of each other. The locations of the two edges formed after blunting are found. 
+1. **DSB finding:** From an SDD exposure, the locations of DNA damages are read, and double-strand breaks (DSBs) are found. DSBs are taken to be a pair of breaks on opposite strands within `DSB_threshold_in_bp` bp of each other. The locations of the two edges formed after blunting are determined. 
 
-2. **DNA fragmentation:** For each blunted DSB end, the length of the fragment containing it, after fragmentation, is determined. This is done using a fragment length probability distribution that is specified using the `dsb_end_fragment_size_distribution_path` parameter. If two different DSBs are close to one another, it is possible that when choosing the fragment sizes, the fragments from the two DSBs overlap with one another. This is handled as described under the `maximum_overlap_fragment_generation` parameter. 
+2. **DNA fragmentation:** For each blunted DSB end, the length of the fragment containing it is determined, assuming that a P5 adapter has already been ligated. This is done using a fragment length probability distribution that is specified using the `dsb_end_fragment_size_distribution_path` parameter. If two different DSBs are close to one another, it is possible that when choosing the fragment sizes, the fragments from the two DSBs overlap with one another. This is handled as described under the `maximum_overlap_fragment_generation` parameter. 
 
-3. **Size filtering:** The size filtering part of the INDUCE-seq method is modeled using a function that specifies the probability of keeping a DNA fragment of a given length, which can be set using the `probability_of_sequencing_path` parameter. 
+3. **Size filtering:** The size filtering used in the INDUCE-seq method is modeled using a function that specifies the probability of keeping a DNA fragment of a given length, which can be set using the `probability_of_sequencing_path` parameter. 
 
-4. **Filtering strands with SSBs:** If the `remove_strands_with_SSBs` parameter is `True` (as by default), then denatured strands with single-strand breaks (SSBs) are removed. Because SSBs are repaired much quicker than DSBs, this parameter can be set to `False` to simulate sequencing once all SSBs have been repaired.
+4. **Filtering strands with SSBs:** If the `remove_strands_with_SSBs` parameter is `True`, then denatured strands with single-strand breaks (SSBs) are removed. Because SSBs are repaired much quicker than DSBs, this parameter can be set to `False` to simulate sequencing once all SSBs have been repaired.
 
 5. **Random strands removal:** Sequenceable strands are randomly removed, with probability specified by the `probability_of_sequencing_multiplier` parameter. This mostly represents DNA strands not binding to the flow cell, or having a missing P5 or P7 adapter. Alternatively, `probability_of_sequencing_multiplier` can be set to 1, and reads removed manually after the simulation. 
 
-6. **Sequencing:** A read is generated for each sequenceable fragment. Insertions, deletions and read quality scores are generated as for the whole genome sequencing version of RadiSeq. 
+6. **Sequencing:** A read is generated for each sequenceable fragment. Insertions, deletions and read quality scores are generated as for the whole-genome-sequencing version of RadiSeq. 
 
 ## Acknowledgements
 
