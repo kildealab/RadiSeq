@@ -174,7 +174,12 @@ bool ART::int_set(std::string& chromSeq, int nThreads){
 }
 //--------------------------------------------------------------------------------------------
 
-
+void ART::resize_vectors(int nThreads) {
+    indel_map_vec.clear();                                                                              // Clear any pre-existing data
+    read_seq_vec.clear();
+    indel_map_vec.resize(nThreads);                                                                     // Resize the vector to accomodate all threads
+    read_seq_vec.resize(nThreads);
+}
 
 //--------------------------------------------------------------------------------------------
 // This function returns the chromosome segment sequence that is currently being processed. 
@@ -458,6 +463,34 @@ void ART::generate_read_with_indel(int threadID){
 }
 //--------------------------------------------------------------------------------------------
 
+void ART::generate_read_with_indel_from_frag(std::string& DNA_sequence, const std::string& adapter_sequence, int threadID) {
+    int length_changed = get_indel_map(threadID);
+    if(static_cast<int>(read_length-length_changed) > static_cast<int>(DNA_sequence.length())){// Check if the generated read map requires a sequence that extends beyond the chromSegmentSeq size
+        std::string adapter_instance = adapter_sequence;
+        for (char& base : adapter_instance) {                                                  // Replace 'I' index placeholders in the adapter with random bases (each occurrence independently)
+            if (base == 'I') {
+                switch (rng::rand_int(1, 4, threadID)) {
+                    case 1: base = 'A'; break;
+                    case 2: base = 'C'; break;
+                    case 3: base = 'G'; break;
+                    case 4: base = 'T'; break;
+                }
+            }
+        }
+        DNA_sequence += adapter_instance;                                                      // If it does, the read reads through into the adapter: append it so a full-length read can be drawn
+
+        if(static_cast<int>(read_length-length_changed) > static_cast<int>(DNA_sequence.length())){// Even with the adapter appended, the fragment may still be too short
+            length_changed = get_balanced_indel_map(threadID);                                 // Try a balanced indel map (deletions <= insertions), which needs less template to fill a full-length read
+
+            if(static_cast<int>(read_length-length_changed) > static_cast<int>(DNA_sequence.length())){// Still too short even with a balanced indel map
+                std::cerr<<"\n ERROR: DSB fragment plus adapter ("<<DNA_sequence.length()<<" bp) is shorter than the read length ("
+                         <<read_length<<" bp) even after balancing indels; the resulting read will be shorter than expected\n";
+            }
+        }
+    }
+    std::string read_template_seq = DNA_sequence.substr(0, read_length-length_changed);
+    read_maker(read_template_seq, threadID);
+}
 
 
 //--------------------------------------------------------------------------------------------
@@ -473,7 +506,7 @@ int ART::get_indel_map(int threadID){
     indel_map.clear();
     int insertion_length{0};                                                                            // Variable to hold the size of the insertion made
     int deletion_length{0};                                                                             // Variable to hold the size of the deletion made
-   
+    
     // Processing deletions first
     if(deletion_rate != 0.0){
         deletion_length = static_cast<int>(rng::binomial_distribution(deletion_rate, read_length, threadID)); // Find size X
@@ -705,7 +738,11 @@ void ART::read_maker(std::string& read_template_seq, int threadID){
     }
     int k{0};
     size_t template_length = read_length;
-    for(size_t i=0; i<template_length;){
+    // read_template_seq is normally at least template_length long, 
+    // but induce_seq's DSB fragments can be shorter than read_length: bound i by
+    // the template's actual length too, so a short fragment yields a correspondingly shorter (truncated)
+    // read instead of reading past the end of read_template_seq.
+    for(size_t i=0; i<template_length && i<read_template_seq.length();){
         if(indel_map.count(k) == 0){                                                                    // For a base location that was unaltered, obtain the base from the chromosome sequence
             read_seq.push_back(read_template_seq[i]); i++; k++; 
         }else if(indel_map[k] == '-'){                                                                  // If the base location corresponds to a deletion, ignore that base
@@ -717,7 +754,9 @@ void ART::read_maker(std::string& read_template_seq, int threadID){
         }
     }
     while(indel_map.count(k)>0){                                                                        // If there are more indels in the map that is not already processed, then include them as well
-        read_seq.push_back(indel_map[k]);
+        if(indel_map[k] != '-'){                                                                        // Trailing insertions still get appended, but a trailing deletion has no template base
+            read_seq.push_back(indel_map[k]);                                                           // left to delete (the template ran out), so it's skipped rather than emitting a literal '-'
+        }
         k++;
     }
 }
@@ -760,7 +799,11 @@ void ART::get_read_quality(std::vector<short>& read_quality_vec, int read_number
 //--------------------------------------------------------------------------------------------
 void ART::add_baseCall_error(std::vector<short>& read_quality_vec, int threadID){
     std::string& read_seq = read_seq_vec[threadID];                                                     // Pass the respective read_seq place holder for each thread by reference
-    for(size_t i=0; i<read_quality_vec.size(); i++){                                                    // read_quality_vec has same size as the read length
+    // read_quality_vec is always sized to read_length (see get_read_quality), but read_seq can be
+    // shorter: induce_seq's DSB fragments can be shorter than read_length (see read_maker), producing
+    // a correspondingly truncated read_seq. Bound the loop by read_seq's actual length too, so this
+    // doesn't read/write past the end of read_seq's buffer.
+    for(size_t i=0; i<read_quality_vec.size() && i<read_seq.size(); i++){                                // read_quality_vec has same size as the read length
         if(read_seq[i]=='N'){                                                                           // If the base in a read is 'N', then change the quality score to 1 (low)
             read_quality_vec[i]= static_cast<short>(1);
             continue;

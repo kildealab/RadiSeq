@@ -4,11 +4,21 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <set>
 
 
 class NGSParameters{
+    // Identifies which parameter file readParameterFile() is currently reading, so set_parameters() can resolve
+    // precedence when the same induce_seq parameter is set in both the main and the induce_seq parameter files
+    // (see main_file_param_names below).
+    enum class ParamSource { NONE, MAIN_USER, INDUCE_SEQ_DEFAULT, INDUCE_SEQ_USER };
+    ParamSource current_param_source{ParamSource::NONE};                          // Set by process_parameterFile before each readParameterFile() call
+    std::set<std::string> main_file_param_names;                                  // Names of every parameter explicitly set in the user's main parameter file
+
     std::string default_parameter_file;                                          // Object holding defualt parameter file path w.r.t the dataFolderPath
     std::string default_parameter_file_name;                                     // Object holding defualt parameter file name. Hard-coded value
+    std::string induce_seq_default_parameter_file;                               // Object holding the default induce_seq parameter file path w.r.t the dataFolderPath
+    std::string induce_seq_default_parameter_file_name;                          // Object holding the default induce_seq parameter file name. Hard-coded value
     std::string dataFolderPath;                                                  // Variable to hold the path to the folder containing all the required data files
     // Following variable objects hold respective parameter value(s)
     unsigned int random_seed;                                                    // RNG seed value. If user provides, fixed value will be stored, else random
@@ -23,7 +33,7 @@ class NGSParameters{
     std::string reference_genome_file;                                           // Variable holding reference genome fasta file path
     double max_diff_model_Vs_reference;                                          // Variable to hold the maximum acceptable difference in the lengths of MC model genome and the reference genome in percentage
     std::string output_directory;                                                // Path to the output directory where all the fastq files generated should be stored
-    //int dsb_threshold;                                                           // This will hold the threshold distance between two opposite SSBs to form a DSB, in bp.
+    int dsb_threshold;                                                            // This will hold the threshold distance between two opposite SSBs to form a DSB, in bp.
     std::string sequencer;                                                       // Name of the illumina sequencer to be used. Must be one with the build-in error profiles
     std::vector<std::string> list_sequencers;                                    // The list of names of all the built-in sequencer profiles we have
     int read_length;                                                             // Automatically set the read length based on the user provided sequencer name.
@@ -60,6 +70,21 @@ class NGSParameters{
     std::string fastq_filename_prefix;                                           // String to hold the user-specified fastq output filename prefix
     bool is_summary_report{false};                                               // True if user wishes to generate a summary report at the end of the run
     bool is_compress_output{false};                                              // True if the user wishes to compress the output FASTQ files (gzip)
+    bool is_induce_seq{false};                                                   // True if the user wishes to induce sequencing errors/artifacts
+    int P5_adapter_length;                                                       // Length of the P5 adapter/primer, used when filtering DSB fragments in induce_seq
+    std::string P7_adapter_sequence;                                             // P7 adapter sequence appended to a read when its DSB fragment is shorter than the read length, used in induce_seq
+    double maximum_overlap_fragment_generation;                                  // Max fraction of the gap between two DSBs that their fragments may overlap by, used in induce_seq
+    std::string dsb_end_fragment_size_distribution_file_name;                 // Hard-coded default file name for the induce_seq DNA fragment size distribution
+    std::string dsb_end_fragment_size_distribution_path;                      // Path to the file containing the DNA fragment size distribution used in induce_seq
+    bool is_output_sequenced_dsbs{true};                                         // True if user wishes to output the DSBs that were sequenced in induce_seq
+    bool is_output_dsbs{false};                                                  // True if user wishes to output the dsb_blunted_ends csv file in induce_seq
+    std::string induce_seq_genome_fasta_path;                                    // Optional path to save/load the undamaged genome FASTA memory-map built in induce_seq, to avoid rebuilding it every run
+    std::string induce_seq_probability_of_sequencing_file_name;                  // Hard-coded default file name for the induce_seq probability of sequencing data
+    std::string induce_seq_probability_of_sequencing_path;                       // Path to the file containing the probability of sequencing (by fragment length) used in induce_seq
+    double probability_of_sequencing_multiplier;                                 // Flat probability (independent of fragment size) that a DSB fragment survives sequencing, used in induce_seq
+    bool is_generate_reads{true};                                                // True if reads should be generated in induce_seq. If False, the genome FASTA is not created/loaded and no read output file is created
+    std::string induce_seq_parameters_path;                                      // Path to a file containing induce_seq specific parameters. If empty, the default induce_seq parameters file is used
+    bool is_remove_strands_with_SSBs{true};                                      // True if DSB fragments (denatured DNA strands) with a single-strand break on them should be removed, used in induce_seq
 
 public:
     NGSParameters();                                                             // Default constructor
@@ -99,8 +124,8 @@ public:
     void set_output_directory(std::string*);                                     // function to set the path to output directory
     const std::string* get_output_directory();                                   // function to get the output directory path
 
-    //void set_dsb_threshold(std::string*);                                        // function to set the DSB threshold value
-    //int get_dsb_threshold();                                                     // function to get the DSB threshold values
+    void set_dsb_threshold(std::string*);                                         // function to set the DSB threshold value
+    int get_dsb_threshold();                                                      // function to get the DSB threshold values
 
     void set_sequencer(std::string*);                                            // function to set the name of the illumina sequencer
     const std::string* get_sequencer();                                          // function to get the sequencer name
@@ -196,6 +221,45 @@ public:
 
     void set_compress_output(std::string*, std::string*);                        // function to set "is_compress_output"
     bool get_compress_output();                                                  // function to get "is_compress_output"
+
+    void set_induce_seq(std::string*, std::string*);                             // function to set "is_induce_seq"
+    bool get_induce_seq();                                                       // function to get "is_induce_seq"
+
+    void set_P5_adapter_length(std::string*);                                    // function to set the P5 adapter/primer length
+    int get_P5_adapter_length();                                                 // function to get the P5 adapter/primer length
+
+    void set_P7_adapter_sequence(std::string*);                                  // function to set the P7 adapter sequence
+    const std::string* get_P7_adapter_sequence();                                // function to get the P7 adapter sequence
+
+    void set_maximum_overlap_fragment_generation(std::string*, std::string*);    // function to set the maximum allowed fragment overlap fraction
+    double get_maximum_overlap_fragment_generation();                           // function to get the maximum allowed fragment overlap fraction
+
+    void set_dsb_end_fragment_size_distribution_path(std::string*, std::string*);  // function to set 'dsb_end_fragment_size_distribution_path'
+    const std::string* get_dsb_end_fragment_size_distribution_path();              // function to get 'dsb_end_fragment_size_distribution_path'
+
+    void set_output_sequenced_dsbs(std::string*, std::string*);              // function to set "is_output_sequenced_dsbs"
+    bool get_output_sequenced_dsbs();                                        // function to get "is_output_sequenced_dsbs"
+
+    void set_output_dsbs(std::string*, std::string*);                        // function to set "is_output_dsbs"
+    bool get_output_dsbs();                                                  // function to get "is_output_dsbs"
+
+    void set_induce_seq_genome_fasta_path(std::string*);                     // function to set 'induce_seq_genome_fasta_path'
+    const std::string* get_induce_seq_genome_fasta_path();                   // function to get 'induce_seq_genome_fasta_path'
+
+    void set_induce_seq_probability_of_sequencing_path(std::string*, std::string*);  // function to set 'induce_seq_probability_of_sequencing_path'
+    const std::string* get_induce_seq_probability_of_sequencing_path();              // function to get 'induce_seq_probability_of_sequencing_path'
+
+    void set_probability_of_sequencing_multiplier(std::string*, std::string*);    // function to set 'probability_of_sequencing_multiplier'
+    double get_probability_of_sequencing_multiplier();                           // function to get 'probability_of_sequencing_multiplier'
+
+    void set_generate_reads(std::string*, std::string*);                     // function to set "is_generate_reads"
+    bool get_generate_reads();                                               // function to get "is_generate_reads"
+
+    void set_induce_seq_parameters_path(std::string*);                       // function to set 'induce_seq_parameters_path'
+    const std::string* get_induce_seq_parameters_path();                     // function to get 'induce_seq_parameters_path'
+
+    void set_remove_strands_with_SSBs(std::string*, std::string*);       // function to set "is_remove_strands_with_SSBs"
+    bool get_remove_strands_with_SSBs();                                 // function to get "is_remove_strands_with_SSBs"
 
     void help_parameter(std::string*);                                           // Function to print help message for every parameter
     void success_parameter();                                                    // Function to check the appropriateness of all parameters

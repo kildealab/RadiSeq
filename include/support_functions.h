@@ -46,7 +46,9 @@ class GCBias{
         static double get_GCbias_slope();                                    // Function to return the slope of the triangular GC bias function
         static void set_GCbias_peak(double);                                 // Function to set the X value of the peak so that all instances of the bias function sees the same value
         static double get_GCfraction(const std::string&);                    // Function to calculate the GC fraction in the chromosome segment that is passed
-        static double get_GCbias(double);                                    // This function will reply a Y value for any X that is passed using the traingular function equation. 
+        static double get_GCbias(double);                                    // This function will reply a Y value for any X that is passed using the traingular function equation.
 };
+
+long get_position_in_file(long, int, std::vector<int>);                      // Function to calculate the absolute position of a chromosomal position within the concatenated file, accounting for header sizes
 
 #endif
